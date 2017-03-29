@@ -1,4 +1,4 @@
-package com.example.fanwe.bluetoothlocation;
+package com.example.fanwe.bluetoothlocation.Activity;
 /*
  * Created by fanwe on 2017/3/29.
  */
@@ -16,6 +16,8 @@ import android.support.v7.app.AppCompatActivity;
 import android.util.Log;
 import android.widget.TextView;
 
+import com.example.fanwe.bluetoothlocation.R;
+
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Map;
@@ -24,7 +26,7 @@ public class ScanActivity extends AppCompatActivity{
     private static final int ENABLE_BLUETOOTH = 1;
     int RSSI_LIMIT = 15, BLE_CHOOSED_NUM = 5;
 
-    TextView rssiText;
+    TextView rssiText, rssiText1;
     Map<String,ArrayList<Double>> m1 = new HashMap<>();  //储存RSSI的MAP
     Map<String,Double> m2 = new HashMap<>();     //过滤后的RSSI的Map
     Map<String,Double[]> bleDevLoc = new HashMap<>(); //固定节点的位置Map
@@ -41,6 +43,7 @@ public class ScanActivity extends AppCompatActivity{
             if (remoteDevice != null) {
                 remoteMAC = remoteDevice.getAddress();
                 if (remoteMAC.equals("19:18:FC:01:F1:0F")) {
+                    Log.d("MAC",remoteMAC);
                     rssi = intent.getExtras().getShort(BluetoothDevice.EXTRA_RSSI);
                     if (!dFinished.equals(intent.getAction())) {
                         if (m1.containsKey(remoteMAC)) {
@@ -64,8 +67,11 @@ public class ScanActivity extends AppCompatActivity{
         super.onCreate(savedInstanceState, persistentState);
         setContentView(R.layout.activity_scan);
         rssiText = (TextView)findViewById(R.id.rssiText);
+        rssiText1 = (TextView)findViewById(R.id.rssiText1);
         initBluetooth();
+        Log.d("init", "init");
         startDiscovery();
+        Log.d("start","start");
     }
     private void initBluetooth(){
         if(!bluetoothAdapter.isEnabled()){
@@ -93,11 +99,19 @@ public class ScanActivity extends AppCompatActivity{
             }
         }
 
-        Double avg =0.0, rssiValue = 0.0, staDev, proLowLim = 0.6 , proHighLim, pdfAltered ;  //rssiValue作为一个中间变量在多个计算过程中间使用
+        Double avg =0.0, rssiValue = 0.0, staDev, proLowLim, proHighLim, pdfAltered ;  //rssiValue作为一个中间变量在多个计算过程中间使用
 
         ArrayList<Double> logarNormalList = GetLogarNormalList(value);   //转换成对数形式
         avg = GetAvg(logarNormalList);   //求均值
         staDev = GetStaDev(logarNormalList, avg, "logarNormal");  //求标准差
+        proHighLim = Math.exp(0.5 * Math.pow(staDev,2) - avg);
+        proLowLim = proHighLim * 0.6;
+        String rssiTextString = logarNormalList.toString() + "\n" + staDev.toString() + "\n" + proLowLim + "\n" + proHighLim;
+        rssiText.setText(rssiTextString);
+        Log.d("before", logarNormalList.toString());
+        Log.d("staDev", staDev.toString());
+        Log.d("Low", proLowLim.toString());
+        Log.d("high",proHighLim.toString());
 
         for (int i = 0; i < logarNormalList.size(); i++) {          //去掉value中的低概率RSSI
             if (staDev !=0) {
@@ -105,12 +119,15 @@ public class ScanActivity extends AppCompatActivity{
                 pdfAltered = Math.exp(exponent) * avg / (0 - value.get(i));
                 Log.d("exponent", exponent.toString());
                 Log.d("pdf", pdfAltered.toString());
-                if (pdfAltered < proLowLim) {
+                if (pdfAltered < proLowLim || pdfAltered > proHighLim) {
                     logarNormalList.remove(i);                              //删除不在高概率区域内的数据
                     i -= 1;
                 }
             }
         }
+        String rssiTextString1= logarNormalList.toString() + "\n";
+        rssiText1.setText(rssiTextString1);
+        Log.d("After", logarNormalList.toString());
 
         if(value.size() != 0) {
             avg = GetAvg(logarNormalList);               //重新获取RSSI的平均值
