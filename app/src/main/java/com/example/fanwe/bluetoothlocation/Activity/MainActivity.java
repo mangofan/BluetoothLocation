@@ -3,6 +3,7 @@ package com.example.fanwe.bluetoothlocation.Activity;
 import android.content.Intent;
 import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
+import android.util.Log;
 import android.view.View;
 import android.widget.Button;
 
@@ -34,11 +35,7 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
                 break;
         }
         if(intent != null)
+            Log.d("button","button");
             startActivity(intent);
-    }
-
-    @Override
-    protected void onDestroy() {
-        super.onDestroy();
     }
 }

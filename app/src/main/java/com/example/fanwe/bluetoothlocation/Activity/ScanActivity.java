@@ -72,6 +72,8 @@ public class ScanActivity extends AppCompatActivity{
         Log.d("init", "init");
         startDiscovery();
         Log.d("start","start");
+
+        startDiscovery();
     }
     private void initBluetooth(){
         if(!bluetoothAdapter.isEnabled()){
