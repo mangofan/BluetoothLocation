@@ -47,8 +47,8 @@ public class ScanActivity extends AppCompatActivity{
             final Short rssi;
             if (remoteDevice != null) {
                 remoteMAC = remoteDevice.getAddress();
-//                if (remoteMAC.equals("19:18:FC:01:F1:0F")) {
-                    Log.d("MAC",remoteMAC);
+//                if (remoteMAC.equals("19:18:FC:01:F0:FE")) {
+//                    Log.d("MAC",remoteMAC);
                     rssi = intent.getExtras().getShort(BluetoothDevice.EXTRA_RSSI);
                     if (!dFinished.equals(intent.getAction())) {
                         if (m1.containsKey(remoteMAC)) {
@@ -64,22 +64,21 @@ public class ScanActivity extends AppCompatActivity{
                         }
                         m2.put(remoteMAC, LogarNormalDistribution(m1.get(remoteMAC)));   //更新MAC地址对应信号强度的map
                         m3 = Sort(m2, BLE_CHOOSED_NUM);
+                        Log.d("m3",m3.toString());
                     }
-//                }
+                }
             }
-        }
+//        }
     };
 
     @Override
     protected void onCreate(@Nullable Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_scan);
-        Log.d("init", "init");
         rssiText = (TextView)findViewById(R.id.rssiText);
         rssiText1 = (TextView)findViewById(R.id.rssiText1);
         initBluetooth();
         startDiscovery();
-        Log.d("start","start");
         startDiscovery();
     }
 
@@ -123,27 +122,28 @@ public class ScanActivity extends AppCompatActivity{
         if(staDev != 0) {
             proHighLim = Math.exp(0.5 * Math.pow(staDev,2) - avg) / (staDev * Math.sqrt(2 * Math.PI));
             proLowLim = proHighLim * 0.6;
-            String rssiTextString = logarNormalList.toString() + "\n" + proLowLim + "\n" + proHighLim;
+            String rssiTextString = value.toString() + "\n" + proLowLim + "\n" + proHighLim;
             rssiText.setText(rssiTextString);
-            Log.d("before", logarNormalList.toString());
-            Log.d("staDev", staDev.toString());
-            Log.d("Low", proLowLim.toString());
-            Log.d("high",proHighLim.toString());
+//            Log.d("before", value.toString());
+//            Log.d("staDev", staDev.toString());
+//            Log.d("Low", proLowLim.toString());
+//            Log.d("high",proHighLim.toString());
             for (int i = 0; i < logarNormalList.size(); i++) {          //去掉value中的低概率RSSI
-                Double exponent = -Math.pow(logarNormalList.get(i) - avg, 2) / (2 * Math.pow(staDev, 2));
+                Double exponent = - Math.pow(logarNormalList.get(i) - avg, 2) / (2 * Math.pow(staDev, 2));
                 pdfAltered = Math.exp(exponent) / ((0 - value.get(i)) * staDev * Math.sqrt(2 * Math.PI));
-                Log.d("exponent", exponent.toString());
-                Log.d("pdf", pdfAltered.toString());
+//                Log.d("exponent", exponent.toString());
+//                Log.d("pdf", pdfAltered.toString());
                 if (pdfAltered < proLowLim || pdfAltered > proHighLim) {
                     logarNormalList.remove(i);                              //删除不在高概率区域内的数据
+                    value.remove(i);
                     i -= 1;
                 }
             }
         }
 
-        String rssiTextString1= logarNormalList.toString() + "\n";
+        String rssiTextString1= value.toString() + "\n";
         rssiText1.setText(rssiTextString1);
-        Log.d("After", logarNormalList.toString());
+//        Log.d("After", value.toString());
 
         if(value.size() != 0) {
             avg = GetAvg(logarNormalList);               //重新获取RSSI的平均值
@@ -190,10 +190,10 @@ public class ScanActivity extends AppCompatActivity{
                 new ArrayList<>(m2.entrySet());
         Map<String, Double> list = new LinkedHashMap<>();
         int limit = BLE_CHOOSED_NUM < m2.size() ? BLE_CHOOSED_NUM:m2.size();
-        for (int i = 0; i < infoIds.size(); i++) {     //排序前
-            String id = infoIds.get(i).toString();
-            System.out.println(id);
-        }
+//        for (int i = 0; i < infoIds.size(); i++) {     //排序前
+//            String id = infoIds.get(i).toString();
+//            System.out.println(id);
+//        }
         Collections.sort(infoIds, new Comparator<Map.Entry<String, Double>>() {        //排序
             public int compare(Map.Entry<String, Double> o1, Map.Entry<String, Double> o2) {
                 return  o2.getValue().compareTo(o1.getValue());
@@ -203,7 +203,7 @@ public class ScanActivity extends AppCompatActivity{
         for (int i = 0; i < limit; i++) {        //排序完,取前limit个
             String id = infoIds.get(i).toString();
             list.put(id.split("=")[0], Double.valueOf(id.split("=")[1]));   //string.split后变为字符串数组。
-            System.out.println(id);
+//            System.out.println(id);
         }
         return list;     //排序好的MAC地址的列表
     }
