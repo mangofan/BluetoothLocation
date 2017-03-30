@@ -34,8 +34,9 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
                 intent = new Intent(this,ScanActivity.class);
                 break;
         }
-        if(intent != null)
-            Log.d("button","button");
+        if(intent != null) {
+            Log.d("button", "button");
             startActivity(intent);
+        }
     }
 }
