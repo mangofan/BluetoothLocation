@@ -1,4 +1,4 @@
-package com.example.fanwe.bluetoothlocation.Activity;
+package Activity;
 /*
  * Created by fanwe on 2017/3/29.
  */
@@ -234,5 +234,4 @@ public class ScanActivity extends AppCompatActivity{
         location[0] = 1.0/3 * ((Ax) + 0.5 * (Ax+Bx) + 0.5 * (Bx+Cx));
         location[1] = 1.0/3 * ((Ay) + 0.5 * (Ay+By) + 0.5 * (By+Cy));
         return location;
-    }
-}
+    }}

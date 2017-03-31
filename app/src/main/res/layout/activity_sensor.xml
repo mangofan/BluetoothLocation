@@ -4,13 +4,15 @@
     android:layout_height="match_parent">
 
     <Button
-        android:id="@+id/button_mass_center"
+        android:id="@+id/sensor_button_1"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="Mass Center Locate"/>
-    <Button
-        android:id="@+id/button_sensor"
+        android:text="开始"/>
+
+    <TextView
+        android:id="@+id/sensor_TextView_1"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="Sensor Locate"/>
+        android:text="data"/>
+
 </LinearLayout>
