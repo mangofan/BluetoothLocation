@@ -1,4 +1,4 @@
-package Activity;
+package activity;
 /*
  * Created by fanwe on 2017/3/29.
  */
@@ -10,14 +10,18 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.os.Bundle;
+import android.support.annotation.InterpolatorRes;
 import android.support.annotation.Nullable;
 import android.support.v7.app.AppCompatActivity;
 import android.util.Log;
 import android.widget.TextView;
 
 import com.example.fanwe.bluetoothlocation.R;
+import utils.FileCache;
 
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Calendar;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -26,13 +30,14 @@ import java.util.Map;
 
 public class ScanActivity extends AppCompatActivity{
     private static final int ENABLE_BLUETOOTH = 1;
-    int RSSI_LIMIT = 15, BLE_CHOOSED_NUM = 7;
+    int RSSI_LIMIT = 15, BLE_CHOOSED_NUM = 3;
 
-    TextView rssiText, rssiText1;
+    TextView rssiText;
     Double[] location = new Double[2];
     Map<String,ArrayList<Double>> m1 = new HashMap<>();  //储存RSSI的MAP
     Map<String,Double> m2 = new HashMap<>();     //过滤后的RSSI的Map
     ArrayList<String> m3 = new ArrayList<>();
+    StringBuffer stringBuffer = new StringBuffer();
     Map<String,Double[]> bleDevLoc = new HashMap<>(); //固定节点的位置Map
     BluetoothAdapter bluetoothAdapter = BluetoothAdapter.getDefaultAdapter();
 
@@ -47,25 +52,28 @@ public class ScanActivity extends AppCompatActivity{
             if (remoteDevice != null) {
                 remoteMAC = remoteDevice.getAddress();
                 if (bleDevLoc.containsKey(remoteMAC)) {
-//                    Log.d("MAC",remoteMAC);
                     rssi = intent.getExtras().getShort(BluetoothDevice.EXTRA_RSSI);
                     if (!dFinished.equals(intent.getAction())) {
                         if (m1.containsKey(remoteMAC)) {
                             ArrayList<Double> list1 = m1.get(remoteMAC);
                             list1.add(0, (double) rssi);
-//                            list1.add(0,-52.0);
                             m1.put(remoteMAC, list1);
                         } else {
                             ArrayList<Double> list = new ArrayList<>();
                             list.add((double) rssi);   //如果这个MAC地址没有出现过，建立list存储历次rssi
-//                            list.add(0,-52.0);
                             m1.put(remoteMAC, list);
                         }
                         m2.put(remoteMAC, LogarNormalDistribution(m1.get(remoteMAC)));   //更新MAC地址对应信号强度的map
                         if (m2.size() > 2) {
-                            m3 = Sort(m2, BLE_CHOOSED_NUM);
-                            Log.d("m3", m3.toString());
-                            location = TriangleLocation(m3, bleDevLoc);
+                            m3 = Sort(m2, BLE_CHOOSED_NUM);     //得到最近的
+//                            Log.d("m3", m3.toString());
+                            location = MassCenterLocation(m3, bleDevLoc);   //通过质心定位得到位置
+                            Calendar now = Calendar.getInstance();
+                            Integer minute = now.get(Calendar.MINUTE);
+                            Integer second = now.get(Calendar.SECOND);
+                            String string = minute.toString() + ":" + second.toString() + " " + Arrays.toString(location) + "\n";
+                            stringBuffer.append(string);
+                            rssiText.setText(stringBuffer);
                         }
                     }
                 }
@@ -78,7 +86,6 @@ public class ScanActivity extends AppCompatActivity{
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_scan);
         rssiText = (TextView)findViewById(R.id.rssiText);
-        rssiText1 = (TextView)findViewById(R.id.rssiText1);
 
         Double[] location21 = {3.9,9.0};
         Double[] location22 = {8.2,9.0};
@@ -105,6 +112,19 @@ public class ScanActivity extends AppCompatActivity{
         startDiscovery();
     }
 
+    @Override
+    protected void onDestroy() {
+        super.onDestroy();
+
+        Thread thread = new Thread(new Runnable() {
+            @Override
+            public void run() {
+
+                FileCache.saveFile(stringBuffer + "\n");  //位置输出到文件中。
+            }
+        });
+        thread.start();
+    }
 
     private void initBluetooth(){
         if(!bluetoothAdapter.isEnabled()){
@@ -160,8 +180,8 @@ public class ScanActivity extends AppCompatActivity{
             }
         }
 
-        String rssiTextString1= value.toString() + "\n";
-        rssiText1.setText(rssiTextString1);
+//        String rssiTextString1= value.toString() + "\n";
+//        rssiText1.setText(rssiTextString1);
 //        Log.d("After", value.toString());
 
         if(value.size() != 0) {
@@ -171,7 +191,7 @@ public class ScanActivity extends AppCompatActivity{
         return rssiValue;
     }
 
-
+    //用来给ArrayLIst产生均值的函数
     private Double GetAvg(ArrayList<Double> list){
         Double sum = 0.0, avg;
         for(int i=0; i< list.size(); i++){
@@ -179,8 +199,9 @@ public class ScanActivity extends AppCompatActivity{
         }
         avg = sum / list.size();
         return avg;
-    }   //用来给ArrayLIst产生均值的函数
+    }
 
+    //用来给ArrayList产生标准差的函数
     private Double GetStaDev(ArrayList<Double> list, Double avg, String distribution){
         Double stadardDev = 0.0;
         if (list.size() >1) {
@@ -194,25 +215,23 @@ public class ScanActivity extends AppCompatActivity{
 //            Log.d("staDev",stadardDev.toString());
         }
         return stadardDev;
-    }   //用来给ArrayList产生标准差的函数
+    }
 
+    //用来给ArrayList每个值取对数，以应用于对数正态运算的函数
     private ArrayList<Double> GetLogarNormalList(ArrayList<Double> list){
         ArrayList<Double> list1 = new ArrayList<>();
         for (int i = 0; i < list.size(); i++){
             list1.add(Math.log( 0 - list.get(i)));
         }
         return list1;
-    }  //用来给ArrayList每个值取对数，以应用于对数正态运算的函数
+    }
 
+    //用来给RSSI排序
     public ArrayList<String> Sort(Map<String, Double> m2, int BLE_CHOOSED_NUM){
         List<Map.Entry<String, Double>> infoIds =
                 new ArrayList<>(m2.entrySet());
         ArrayList<String> list = new ArrayList<>();
         int limit = BLE_CHOOSED_NUM < m2.size() ? BLE_CHOOSED_NUM:m2.size();
-//        for (int i = 0; i < infoIds.size(); i++) {     //排序前
-//            String id = infoIds.get(i).toString();
-//            System.out.println(id);
-//        }
 
         Collections.sort(infoIds, new Comparator<Map.Entry<String, Double>>() {        //排序
             public int compare(Map.Entry<String, Double> o1, Map.Entry<String, Double> o2) {
@@ -225,13 +244,17 @@ public class ScanActivity extends AppCompatActivity{
 //            System.out.println(id);
         }
         return list;     //排序好的MAC地址的列表
-    }  //用来给RSSI排序
+    }
 
-    public Double[] TriangleLocation (ArrayList<String> m3,Map<String,Double[]> bleDevLoc){
+    public Double[] MassCenterLocation (ArrayList<String> m3,Map<String,Double[]> bleDevLoc){
         Double[] location =  new Double[2];
         String A = m3.get(0),B = m3.get(1), C = m3.get(2);
         Double Ax = bleDevLoc.get(A)[0], Ay = bleDevLoc.get(A)[1], Bx = bleDevLoc.get(B)[0], By = bleDevLoc.get(B)[1], Cx = bleDevLoc.get(C)[0], Cy = bleDevLoc.get(C)[1];
         location[0] = 1.0/3 * ((Ax) + 0.5 * (Ax+Bx) + 0.5 * (Bx+Cx));
         location[1] = 1.0/3 * ((Ay) + 0.5 * (Ay+By) + 0.5 * (By+Cy));
+        Log.d("m3",m3.toString());
+        Log.d("location", Arrays.toString(location));
         return location;
     }}
+
+

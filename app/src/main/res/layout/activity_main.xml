@@ -7,10 +7,10 @@
         android:id="@+id/button_mass_center"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="Mass Center Locate"/>
+        android:text="@string/button_mass_center"/>
     <Button
         android:id="@+id/button_sensor"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="Sensor Locate"/>
+        android:text="@string/button_sensor"/>
 </LinearLayout>

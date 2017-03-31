@@ -1,4 +1,4 @@
-package Activity;
+package activity;
 
 import android.content.Intent;
 import android.support.v7.app.AppCompatActivity;
@@ -38,9 +38,7 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
                 intent = new Intent(this,SensorActivity.class);
                 break;
         }
-        if(intent != null) {
-            Log.d("button", "button");
+        if(intent != null)
             startActivity(intent);
-        }
     }
 }
