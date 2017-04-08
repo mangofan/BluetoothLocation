@@ -10,14 +10,12 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.os.Bundle;
-import android.support.annotation.InterpolatorRes;
 import android.support.annotation.Nullable;
 import android.support.v7.app.AppCompatActivity;
 import android.util.Log;
 import android.widget.TextView;
 
 import com.example.fanwe.bluetoothlocation.R;
-import utils.FileCache;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -27,6 +25,8 @@ import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+
+import utils.FileCache;
 
 public class ScanActivity extends AppCompatActivity{
     private static final int ENABLE_BLUETOOTH = 1;
@@ -87,16 +87,16 @@ public class ScanActivity extends AppCompatActivity{
         setContentView(R.layout.activity_scan);
         rssiText = (TextView)findViewById(R.id.rssiText);
 
-        Double[] location21 = {3.9,9.0};
-        Double[] location22 = {8.2,9.0};
-        Double[] location23 = {0.2, 5.0};
-        Double[] location24 = {4.2, 5.0};
-        Double[] location25 = {8.2, 5.0};
-        Double[] location26 = {12.2, 5.0};
-        Double[] location27 = {0.2, 1.0};
-        Double[] location28 = {4.2, 1.0};
-        Double[] location29 = {8.2, 1.0};
-        Double[] location30 = {12.2, 1.0};
+        Double[] location21 = {11.5,0.7};
+        Double[] location22 = {15.8,0.7};
+        Double[] location23 = {7.8, 4.7};
+        Double[] location24 = {11.8, 4.7};
+        Double[] location25 = {15.8, 4.7};
+        Double[] location26 = {19.8, 4.7};
+        Double[] location27 = {7.8, 8.7};
+        Double[] location28 = {11.8, 8.7};
+        Double[] location29 = {15.8, 8.7};
+        Double[] location30 = {19.8, 8.7};
         bleDevLoc.put("19:18:FC:01:F1:0E",location21);
         bleDevLoc.put("19:18:FC:01:F1:0F",location22);
         bleDevLoc.put("19:18:FC:01:F0:F8",location23);
