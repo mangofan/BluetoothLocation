@@ -9,6 +9,10 @@ import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
+import android.hardware.Sensor;
+import android.hardware.SensorEvent;
+import android.hardware.SensorEventListener;
+import android.hardware.SensorManager;
 import android.os.Bundle;
 import android.support.annotation.Nullable;
 import android.support.v7.app.AppCompatActivity;
@@ -25,6 +29,8 @@ import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Timer;
+import java.util.TimerTask;
 
 import utils.FileCache;
 
@@ -32,7 +38,7 @@ public class ScanActivity extends AppCompatActivity{
     private static final int ENABLE_BLUETOOTH = 1;
     int RSSI_LIMIT = 15, BLE_CHOOSED_NUM = 3;
 
-    TextView rssiText;
+    TextView scanText, scanText1;  //注册两块文字块
     Double[] location = new Double[2];
     Map<String,ArrayList<Double>> m1 = new HashMap<>();  //储存RSSI的MAP
     Map<String,Double> m2 = new HashMap<>();     //过滤后的RSSI的Map
@@ -40,6 +46,10 @@ public class ScanActivity extends AppCompatActivity{
     StringBuffer stringBuffer = new StringBuffer();
     Map<String,Double[]> bleDevLoc = new HashMap<>(); //固定节点的位置Map
     BluetoothAdapter bluetoothAdapter = BluetoothAdapter.getDefaultAdapter();
+
+    Integer TIME0 = 200;
+    float[] rotVecValues = new float[5];
+    SensorManager sensorManager;   //注册SensorManager
 
     private BroadcastReceiver mReceiver = new BroadcastReceiver() {
         String dFinished = BluetoothAdapter.ACTION_DISCOVERY_FINISHED;
@@ -73,7 +83,7 @@ public class ScanActivity extends AppCompatActivity{
                             Integer second = now.get(Calendar.SECOND);
                             String string = minute.toString() + ":" + second.toString() + " " + Arrays.toString(location) + "\n";
                             stringBuffer.append(string);
-                            rssiText.setText(stringBuffer);
+                            scanText.setText(stringBuffer);
                         }
                     }
                 }
@@ -85,7 +95,11 @@ public class ScanActivity extends AppCompatActivity{
     protected void onCreate(@Nullable Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_scan);
-        rssiText = (TextView)findViewById(R.id.rssiText);
+        scanText = (TextView)findViewById(R.id.scanText);
+        scanText1 = (TextView)findViewById(R.id.scanText1);
+        sensorManager = (SensorManager) getSystemService(Context.SENSOR_SERVICE);
+        Sensor rotvectorSensor = sensorManager.getDefaultSensor(Sensor.TYPE_ROTATION_VECTOR);
+        sensorManager.registerListener(listener, rotvectorSensor, sensorManager.SENSOR_DELAY_GAME);
 
         Double[] location21 = {11.5,0.7};
         Double[] location22 = {15.8,0.7};
@@ -110,21 +124,45 @@ public class ScanActivity extends AppCompatActivity{
 
         initBluetooth();
         startDiscovery();
+
+        //设置每隔TIME0更新UI
+        Timer updateTimer = new Timer("Update");
+        updateTimer.scheduleAtFixedRate(new TimerTask()
+        {
+            @Override
+            public void run()
+            {
+                updateGUI();
+            }
+        },0,TIME0);
     }
 
-    @Override
-    protected void onDestroy() {
-        super.onDestroy();
+    //注册事件监听器
+    private SensorEventListener listener = new SensorEventListener() {
 
-        Thread thread = new Thread(new Runnable() {
+        @Override
+        public void onSensorChanged(SensorEvent event) {
+            if(event.sensor.getType() == Sensor.TYPE_ROTATION_VECTOR){
+                rotVecValues = event.values.clone();
+            }
+        }
+        @Override
+        public void onAccuracyChanged(Sensor sensor, int accuracy) {
+        }
+    };
+
+    //UI 更新方法
+    private void updateGUI(){
+        runOnUiThread(new Runnable() {
             @Override
             public void run() {
-
-                FileCache.saveFile(stringBuffer + "\n");  //位置输出到文件中。
+                String need = String.valueOf(rotVecValues[0]) + '\n' + String.valueOf(rotVecValues[1]) + '\n' + String.valueOf(rotVecValues[2]) + '\n' + String.valueOf(rotVecValues[3]);  //展示Sx，Sy，ax，ay
+                scanText1.setText(need);
             }
         });
-        thread.start();
     }
+
+
 
     private void initBluetooth(){
         if(!bluetoothAdapter.isEnabled()){
@@ -161,8 +199,8 @@ public class ScanActivity extends AppCompatActivity{
         if(staDev != 0) {
             proHighLim = Math.exp(0.5 * Math.pow(staDev,2) - avg) / (staDev * Math.sqrt(2 * Math.PI));
             proLowLim = proHighLim * 0.6;
-            String rssiTextString = value.toString() + "\n" + proLowLim + "\n" + proHighLim;
-            rssiText.setText(rssiTextString);
+            String scanTextString = value.toString() + "\n" + proLowLim + "\n" + proHighLim;
+            scanText.setText(scanTextString);
 //            Log.d("before", value.toString());
 //            Log.d("staDev", staDev.toString());
 //            Log.d("Low", proLowLim.toString());
@@ -180,8 +218,8 @@ public class ScanActivity extends AppCompatActivity{
             }
         }
 
-//        String rssiTextString1= value.toString() + "\n";
-//        rssiText1.setText(rssiTextString1);
+//        String scanTextString1= value.toString() + "\n";
+//        scanText1.setText(scanTextString1);
 //        Log.d("After", value.toString());
 
         if(value.size() != 0) {
@@ -246,6 +284,7 @@ public class ScanActivity extends AppCompatActivity{
         return list;     //排序好的MAC地址的列表
     }
 
+    //通过质心方式给出初始基本定位
     public Double[] MassCenterLocation (ArrayList<String> m3,Map<String,Double[]> bleDevLoc){
         Double[] location =  new Double[2];
         String A = m3.get(0),B = m3.get(1), C = m3.get(2);
@@ -255,6 +294,37 @@ public class ScanActivity extends AppCompatActivity{
         Log.d("m3",m3.toString());
         Log.d("location", Arrays.toString(location));
         return location;
-    }}
+    }
+
+
+
+
+
+
+    @Override
+    protected void onDestroy() {
+        super.onDestroy();
+
+//        Thread thread = new Thread(new Runnable() {
+//            @Override
+//            public void run() {
+//
+//                FileCache.saveFile(stringBuffer + "\n");  //位置输出到文件中。
+//            }
+//        });
+//        thread.start();
+    }
+    @Override
+    protected void onResume() {
+        super.onResume();
+        Sensor rotvectorSensor = sensorManager.getDefaultSensor(Sensor.TYPE_ROTATION_VECTOR);
+        sensorManager.registerListener(listener, rotvectorSensor, SensorManager.SENSOR_DELAY_GAME);
+    }
+    @Override
+    protected void onPause() {
+        sensorManager.unregisterListener(listener);
+        super.onPause();
+    }
+}
 
 

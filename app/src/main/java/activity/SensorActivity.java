@@ -22,8 +22,8 @@ public class SensorActivity extends AppCompatActivity {
     private SensorManager sensorManager;
     private TextView sensorTextView1;
 
-    Integer T0 = 200;
-    float[] rotValues = new float[5];
+    Integer TIME0 = 200;
+    float[] rotVecValues = new float[5];
 
     @Override
     protected void onCreate(@Nullable Bundle savedInstanceState) {
@@ -34,7 +34,7 @@ public class SensorActivity extends AppCompatActivity {
         Sensor rotvectorSensor = sensorManager.getDefaultSensor(Sensor.TYPE_ROTATION_VECTOR);
         sensorManager.registerListener(listener, rotvectorSensor, sensorManager.SENSOR_DELAY_GAME);
 
-        //设置每隔T0更新UI
+        //设置每隔TIME0更新UI
         Timer updateTimer = new Timer("Update");
         updateTimer.scheduleAtFixedRate(new TimerTask()
         {
@@ -43,7 +43,7 @@ public class SensorActivity extends AppCompatActivity {
             {
                 updateGUI();
             }
-        },0,T0);
+        },0,TIME0);
     }
 
     //UI 更新方法
@@ -51,7 +51,7 @@ public class SensorActivity extends AppCompatActivity {
         runOnUiThread(new Runnable() {
             @Override
             public void run() {
-                String need = String.valueOf(rotValues[0]) + '\n' + String.valueOf(rotValues[1]) + '\n' + String.valueOf(rotValues[2]) + '\n' + String.valueOf(rotValues[3]);  //展示Sx，Sy，ax，ay
+                String need = String.valueOf(rotVecValues[0]) + '\n' + String.valueOf(rotVecValues[1]) + '\n' + String.valueOf(rotVecValues[2]) + '\n' + String.valueOf(rotVecValues[3]);  //展示Sx，Sy，ax，ay
                 sensorTextView1.setText(need);
             }
         });
@@ -62,10 +62,9 @@ public class SensorActivity extends AppCompatActivity {
         @Override
         public void onSensorChanged(SensorEvent event) {
             if(event.sensor.getType() == Sensor.TYPE_ROTATION_VECTOR){
-                rotValues = event.values.clone();
+                rotVecValues = event.values.clone();
             }
         }
-
         @Override
         public void onAccuracyChanged(Sensor sensor, int accuracy) {
         }
