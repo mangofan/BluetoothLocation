@@ -3,23 +3,14 @@
     android:orientation="vertical" android:layout_width="match_parent"
     android:layout_height="match_parent">
 
-    <TextView
-        android:id="@+id/scanText1"
+    <Button
+        android:id="@+id/button_mass_center"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:gravity="center"
-        />
-    <TextView
-        android:id="@+id/scanText2"
+        android:text="@string/button_mass_center"/>
+    <Button
+        android:id="@+id/button_sensor"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:gravity="center"
-        />
-    <TextView
-        android:id="@+id/scanText3"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:gravity="center"
-        />
-
+        android:text="@string/button_sensor"/>
 </LinearLayout>

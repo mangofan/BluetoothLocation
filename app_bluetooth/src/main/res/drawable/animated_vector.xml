@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<animated-vector
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    android:drawable="@drawable/ic_10023_2">
+    <target
+        android:name="circle_point"
+        android:animation="@animator/circle_point"/>
+</animated-vector>

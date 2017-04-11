@@ -1,0 +1,9 @@
+<resources>
+    <string name="app_name">BluetoothLocation</string>
+    <string name="button_mass_center">Mass Center Locate</string>
+    <string name="button_sensor">Sensor Locate</string>
+    <string name="sensor_button_1">开始</string>
+    <string name="sensor_TextView_1">data</string>
+    <string name="title_activity_show_map">ShowMapActivity</string>
+    <string name="action_settings">Settings</string>
+</resources>
