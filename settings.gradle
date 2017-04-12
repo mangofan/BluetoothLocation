@@ -1,1 +1,1 @@
-include ':app', ':app_bluetooth'
+include ':app',":app_bluetooth"

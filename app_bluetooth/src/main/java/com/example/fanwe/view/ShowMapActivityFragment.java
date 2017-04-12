@@ -69,6 +69,7 @@ public class ShowMapActivityFragment extends Fragment {
         mtext= (TextView) root.findViewById(textView2);
         initWebview();
         initlocation();
+        init();
         EventBus.getDefault().register(this);
 
         /** 模拟 定位位置变化的 代码  测试*/
@@ -101,6 +102,14 @@ public class ShowMapActivityFragment extends Fragment {
         return root;
     }
 
+    private void init() {
+        m1=Collections.synchronizedMap(m1);
+        m2=Collections.synchronizedMap(m2);
+        m3=Collections.synchronizedList(m3);
+        mTest=Collections.synchronizedMap(mTest);
+
+    }
+
     private void initWebview() {
         WebSettings settings = webView.getSettings();
         settings.setJavaScriptEnabled(true);
@@ -127,10 +136,10 @@ public class ShowMapActivityFragment extends Fragment {
     int RSSI_LIMIT = 8, BLE_CHOOSED_NUM = 3;
 
     Double[] location = new Double[2];
-    Map<String,ArrayList<Double>> m1 = new HashMap<>();  //储存RSSI的MAP
-    Map<String,ArrayList<Double>> mTest = new HashMap<>();  //储存键为MAC地址，值为过滤后的RSSI的MAP
+    Map<String,List<Double>> m1 = new HashMap<>();  //储存RSSI的MAP
+    Map<String,List<Double>> mTest = new HashMap<>();  //储存键为MAC地址，值为过滤后的RSSI的MAP
     Map<String,Double> m2 = new HashMap<>();     //过滤后的RSSI的Map
-    ArrayList<String> m3 = new ArrayList<>();
+    List<String> m3 = new ArrayList<>();
     StringBuffer stringBuffer = new StringBuffer();
     Map<String,Double[]> bleDevLoc = new HashMap<>(); //固定节点的位置Map
     BluetoothAdapter bluetoothAdapter = BluetoothAdapter.getDefaultAdapter();
@@ -140,58 +149,67 @@ public class ShowMapActivityFragment extends Fragment {
 
         @Override
         public void onReceive(Context context, Intent intent) {
-            BluetoothDevice remoteDevice = intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE);
-            String remoteMAC;
-            final Short rssi;
-            if (remoteDevice != null) {
-                remoteMAC = remoteDevice.getAddress();
-                if (bleDevLoc.containsKey(remoteMAC)) {
-                    rssi = intent.getExtras().getShort(BluetoothDevice.EXTRA_RSSI);
-                    if (!dFinished.equals(intent.getAction())) {
-                        if (m1.containsKey(remoteMAC)) {
-                            ArrayList<Double> list1 = m1.get(remoteMAC);
-                            list1.add(0, (double) rssi);
-                            m1.put(remoteMAC, list1);
-                        } else {
-                            ArrayList<Double> list = new ArrayList<>();
-                            list.add((double) rssi);   //如果这个MAC地址没有出现过，建立list存储历次rssi
-                            m1.put(remoteMAC, list);
-                        }
-                        final ArrayList<Double> rssiValueFliterd = LogarNormalDistribution(m1.get(remoteMAC));  //获取滤波后的信号强度表
-                        mTest.put(remoteMAC, rssiValueFliterd);
-                        m2.put(remoteMAC, GetAvg(rssiValueFliterd));   //更新MAC地址对应信号强度的map
-                        if (m2.size() > 2) {
-                            m3 = getSort(m2, BLE_CHOOSED_NUM);     //得到按距离排序的蓝牙节点的列表
-                            location = MassCenterLocation(m3, bleDevLoc);   //通过质心定位得到位置
-                            String need = location[0].toString() + "," +location[1].toString();
-                            mtext.setText(need);
-                            webView.loadUrl(setInsetJS(location[0]+"",location[1]+""));
-//                            Calendar now = Calendar.getInstance();
-//                            Integer minute = now.get(Calendar.MINUTE);
-//                            Integer second = now.get(Calendar.SECOND);
-//                            String string = minute.toString() + ":" + second.toString() + " " + Arrays.toString(location) + "\n";
-//                            stringBuffer.append(string);
 
-                            Thread thread = new Thread(new Runnable() {
-                                @Override
-                                public void run() {
-                                    FileCache cache = new FileCache();
-                                    Calendar now = Calendar.getInstance();
-                                    Integer minute = now.get(Calendar.MINUTE);
-                                    Integer second = now.get(Calendar.SECOND);
-                                    String need1 = "{"  + location[0].toString() + "   " + location[1].toString() + "     " + minute.toString() + ":" + second.toString() + "\n" + getMapForStore(m3,m1) + "\n" + getMapForStore(m3,mTest) + "\n" + "}";
-                                    cache.saveFile(need1);
-                                }
-                            });
-                            thread.start();
+                BluetoothDevice remoteDevice = intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE);
+                String remoteMAC;
+                final Short rssi;
+                if (remoteDevice != null) {
+                    remoteMAC = remoteDevice.getAddress();
+                    if (bleDevLoc.containsKey(remoteMAC)) {
+                        rssi = intent.getExtras().getShort(BluetoothDevice.EXTRA_RSSI);
+                        if (!dFinished.equals(intent.getAction())) {
+                            if (m1.containsKey(remoteMAC)) {
+                                List<Double> list1 = m1.get(remoteMAC);
+                                list1.add(0, (double) rssi);
+                                m1.put(remoteMAC, list1);
+                            } else {
+                                ArrayList<Double> list = new ArrayList<>();
+                                list.add((double) rssi);   //如果这个MAC地址没有出现过，建立list存储历次rssi
+                                m1.put(remoteMAC, list);
+                            }
+                            final List<Double> rssiValueFliterd = LogarNormalDistribution(m1.get(remoteMAC));  //获取滤波后的信号强度表
+                            mTest.put(remoteMAC, rssiValueFliterd);
+                            m2.put(remoteMAC, GetAvg(rssiValueFliterd));   //更新MAC地址对应信号强度的map
+                            if (m2.size() > 2) {
+                                m3 = getSort(m2, BLE_CHOOSED_NUM);     //得到按距离排序的蓝牙节点的列表
+                                location = getNearestNode(m3, bleDevLoc);   //定位为最近的节点的位置。
+    //                            location = getMassCenterLocation(m3, bleDevLoc);   //通过质心定位得到位置
+    //                            String need = location[0].toString() + "," +location[1].toString();
+                                String need = m3.get(0).split(":")[5];
+                                mtext.setText(need);
+                                webView.loadUrl(setInsetJS(location[0] + "", location[1] + ""));
+    //                            Calendar now = Calendar.getInstance();
+    //                            Integer minute = now.get(Calendar.MINUTE);
+    //                            Integer second = now.get(Calendar.SECOND);
+    //                            String string = minute.toString() + ":" + second.toString() + " " + Arrays.toString(location) + "\n";
+    //                            stringBuffer.append(string);
+
+                                Thread thread = new Thread(new Runnable() {
+                                    @Override
+                                    public void run() {
+                                        Calendar now = Calendar.getInstance();
+                                        Integer minute = now.get(Calendar.MINUTE);
+                                        Integer second = now.get(Calendar.SECOND);
+                                        Map<String, List<Double>> mapForStore = getMapForStore(m3, m1);
+                                        Map<String, List<Double>> mapForStore1 = getMapForStore(m3, mTest);
+                                        String need1 = "{" + location[0].toString() + "   " + location[1].toString() + "     "
+                                                + minute.toString() + ":" + second.toString() + "\n"
+                                                + mapForStore + "\n"
+                                                + mapForStore1 + "\n" + "}";
+                                        FileCache.saveFile(need1);
+                                    }
+                                });
+
+                                thread.start();
                         }
+
                     }
                 }
             }
         }
     };
 
-    private ArrayList<Double> LogarNormalDistribution(ArrayList<Double> m1list){
+    private List<Double> LogarNormalDistribution(List<Double> m1list){
         ArrayList<Double> value = new ArrayList<>();
         if( m1list.size() > RSSI_LIMIT){             //截取长度合适RSSI字符串,长于15时截取前15个
             for (int i = 0; i <RSSI_LIMIT ; i++){
@@ -224,11 +242,15 @@ public class ShowMapActivityFragment extends Fragment {
             }
         }
 
+//        if(value.size() != 0) {
+//            avg = GetAvg(value);               //重新获取RSSI的平均值
+//        }
+
         return value;
     }
 
     //给ArrayLIst产生均值的函数
-    private Double GetAvg(ArrayList<Double> list){
+    private Double GetAvg(List<Double> list){
         Double sum = 0.0, avg = 0.0;
         if (list.size() != 0) {
             for (int i = 0; i < list.size(); i++) {
@@ -284,7 +306,15 @@ public class ShowMapActivityFragment extends Fragment {
         return list;     //排序好的MAC地址的列表
     }
 
-    public Double[] MassCenterLocation (ArrayList<String> m3,Map<String,Double[]> bleDevLoc){
+    public Double[] getNearestNode (List<String> m3,Map<String,Double[]> bleDevLoc){
+        Double[] location =  new Double[2];
+        String A = m3.get(0);
+        location[0] = bleDevLoc.get(A)[0];
+        location[1] = bleDevLoc.get(A)[1];
+        return location;
+    }
+
+    public Double[] getMassCenterLocation (ArrayList<String> m3,Map<String,Double[]> bleDevLoc){
         Double[] location =  new Double[2];
         String A = m3.get(0),B = m3.get(1), C = m3.get(2);
         Double Ax = bleDevLoc.get(A)[0], Ay = bleDevLoc.get(A)[1], Bx = bleDevLoc.get(B)[0], By = bleDevLoc.get(B)[1], Cx = bleDevLoc.get(C)[0], Cy = bleDevLoc.get(C)[1];
@@ -297,11 +327,11 @@ public class ShowMapActivityFragment extends Fragment {
 
 
     //从MAP中选出 list中元素作为键，对应的键值对
-    public Map<String, ArrayList<Double>> getMapForStore (ArrayList<String> m3, Map<String,ArrayList<Double>> map){
-        Map<String,ArrayList<Double>> mapReturn = new HashMap<>();
+    public synchronized  Map<String, List<Double>> getMapForStore (List<String> m3, Map<String,List<Double>> map){
+        Map<String,List<Double>> mapReturn = new HashMap<>();
         for (int i = 0 ; i < m3.size(); i++){
             String mac = m3.get(i);
-            ArrayList<Double> listRssi = map.get(mac);
+            List<Double> listRssi = map.get(mac);
             mapReturn.put(mac,listRssi);
         }
         return mapReturn;
@@ -360,6 +390,12 @@ public class ShowMapActivityFragment extends Fragment {
         bleDevLoc.put("19:18:FC:01:F0:FF",location30);
 
         initBluetooth();
+    }
+
+    @Override
+    public void onPause() {
+//        sensorManager.unregisterListener(listener);
+        super.onPause();
     }
 
     @Override
