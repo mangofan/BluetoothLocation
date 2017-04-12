@@ -103,9 +103,9 @@ public class ShowMapActivityFragment extends Fragment {
     }
 
     private void init() {
-        m1=Collections.synchronizedMap(m1);
-        m2=Collections.synchronizedMap(m2);
-        m3=Collections.synchronizedList(m3);
+        mAllRssi=Collections.synchronizedMap(mAllRssi);
+        mRssiFilterd=Collections.synchronizedMap(mRssiFilterd);
+        listSortedNode=Collections.synchronizedList(listSortedNode);
         mTest=Collections.synchronizedMap(mTest);
 
     }
@@ -136,12 +136,12 @@ public class ShowMapActivityFragment extends Fragment {
     int RSSI_LIMIT = 8, BLE_CHOOSED_NUM = 3;
 
     Double[] location = new Double[2];
-    Map<String,List<Double>> m1 = new HashMap<>();  //储存RSSI的MAP
+    Map<String,List<Double>> mAllRssi = new HashMap<>();  //储存RSSI的MAP
     Map<String,List<Double>> mTest = new HashMap<>();  //储存键为MAC地址，值为过滤后的RSSI的MAP
-    Map<String,Double> m2 = new HashMap<>();     //过滤后的RSSI的Map
-    List<String> m3 = new ArrayList<>();
+    Map<String,Double> mRssiFilterd = new HashMap<>();     //过滤后的RSSI的Map
+    List<String> listSortedNode = new ArrayList<>();
     StringBuffer stringBuffer = new StringBuffer();
-    Map<String,Double[]> bleDevLoc = new HashMap<>(); //固定节点的位置Map
+    Map<String,Double[]> bleNodeLoc = new HashMap<>(); //固定节点的位置Map
     BluetoothAdapter bluetoothAdapter = BluetoothAdapter.getDefaultAdapter();
 
     public BroadcastReceiver mReceiver = new BroadcastReceiver() {
@@ -155,27 +155,27 @@ public class ShowMapActivityFragment extends Fragment {
                 final Short rssi;
                 if (remoteDevice != null) {
                     remoteMAC = remoteDevice.getAddress();
-                    if (bleDevLoc.containsKey(remoteMAC)) {
+                    if (bleNodeLoc.containsKey(remoteMAC)) {
                         rssi = intent.getExtras().getShort(BluetoothDevice.EXTRA_RSSI);
                         if (!dFinished.equals(intent.getAction())) {
-                            if (m1.containsKey(remoteMAC)) {
-                                List<Double> list1 = m1.get(remoteMAC);
+                            if (mAllRssi.containsKey(remoteMAC)) {
+                                List<Double> list1 = mAllRssi.get(remoteMAC);
                                 list1.add(0, (double) rssi);
-                                m1.put(remoteMAC, list1);
+                                mAllRssi.put(remoteMAC, list1);
                             } else {
                                 ArrayList<Double> list = new ArrayList<>();
                                 list.add((double) rssi);   //如果这个MAC地址没有出现过，建立list存储历次rssi
-                                m1.put(remoteMAC, list);
+                                mAllRssi.put(remoteMAC, list);
                             }
-                            final List<Double> rssiValueFliterd = LogarNormalDistribution(m1.get(remoteMAC));  //获取滤波后的信号强度表
-                            mTest.put(remoteMAC, rssiValueFliterd);
-                            m2.put(remoteMAC, GetAvg(rssiValueFliterd));   //更新MAC地址对应信号强度的map
-                            if (m2.size() > 2) {
-                                m3 = getSort(m2, BLE_CHOOSED_NUM);     //得到按距离排序的蓝牙节点的列表
-                                location = getNearestNode(m3, bleDevLoc);   //定位为最近的节点的位置。
-    //                            location = getMassCenterLocation(m3, bleDevLoc);   //通过质心定位得到位置
+                            final List<Double> rssiValueFilterd = LogarNormalDistribution(mAllRssi.get(remoteMAC));  //获取滤波后的信号强度表
+                            mTest.put(remoteMAC, rssiValueFilterd);
+                            mRssiFilterd.put(remoteMAC, GetAvg(rssiValueFilterd));   //更新MAC地址对应信号强度的map
+                            if (mRssiFilterd.size() > 2) {
+                                listSortedNode = getSort(mRssiFilterd, BLE_CHOOSED_NUM);     //得到按距离排序的蓝牙节点的列表
+                                location = getNearestNode(listSortedNode, bleNodeLoc);   //定位为最近的节点的位置。
+    //                            location = getMassCenterLocation(listSortedNode, bleNodeLoc);   //通过质心定位得到位置
     //                            String need = location[0].toString() + "," +location[1].toString();
-                                String need = m3.get(0).split(":")[5];
+                                String need = listSortedNode.get(0).split(":")[5];
                                 mtext.setText(need);
                                 webView.loadUrl(setInsetJS(location[0] + "", location[1] + ""));
     //                            Calendar now = Calendar.getInstance();
@@ -190,8 +190,8 @@ public class ShowMapActivityFragment extends Fragment {
                                         Calendar now = Calendar.getInstance();
                                         Integer minute = now.get(Calendar.MINUTE);
                                         Integer second = now.get(Calendar.SECOND);
-                                        Map<String, List<Double>> mapForStore = getMapForStore(m3, m1);
-                                        Map<String, List<Double>> mapForStore1 = getMapForStore(m3, mTest);
+                                        Map<String, List<Double>> mapForStore = getMapForStore(listSortedNode, mAllRssi);
+                                        Map<String, List<Double>> mapForStore1 = getMapForStore(listSortedNode, mTest);
                                         String need1 = "{" + location[0].toString() + "   " + location[1].toString() + "     "
                                                 + minute.toString() + ":" + second.toString() + "\n"
                                                 + mapForStore + "\n"
@@ -209,15 +209,15 @@ public class ShowMapActivityFragment extends Fragment {
         }
     };
 
-    private List<Double> LogarNormalDistribution(List<Double> m1list){
+    private List<Double> LogarNormalDistribution(List<Double> mAllRssilist){
         ArrayList<Double> value = new ArrayList<>();
-        if( m1list.size() > RSSI_LIMIT){             //截取长度合适RSSI字符串,长于15时截取前15个
+        if( mAllRssilist.size() > RSSI_LIMIT){             //截取长度合适RSSI字符串,长于15时截取前15个
             for (int i = 0; i <RSSI_LIMIT ; i++){
-                value.add(m1list.get(i));
+                value.add(mAllRssilist.get(i));
             }
         }else {
-            for (int i = 0; i < m1list.size(); i++) { //截取长度合适RSSI字符串，短于15时全部复制
-                value.add(m1list.get(i));
+            for (int i = 0; i < mAllRssilist.size(); i++) { //截取长度合适RSSI字符串，短于15时全部复制
+                value.add(mAllRssilist.get(i));
             }
         }
 
@@ -287,11 +287,11 @@ public class ShowMapActivityFragment extends Fragment {
     }
 
     //给RSSI排序
-    public ArrayList<String> getSort(Map<String, Double> m2, int BLE_CHOOSED_NUM){
+    public ArrayList<String> getSort(Map<String, Double> mRssiFilterd, int BLE_CHOOSED_NUM){
         List<Map.Entry<String, Double>> infoIds =
-                new ArrayList<>(m2.entrySet());
+                new ArrayList<>(mRssiFilterd.entrySet());
         ArrayList<String> list = new ArrayList<>();
-        int limit = BLE_CHOOSED_NUM < m2.size() ? BLE_CHOOSED_NUM:m2.size();
+        int limit = BLE_CHOOSED_NUM < mRssiFilterd.size() ? BLE_CHOOSED_NUM:mRssiFilterd.size();
 
         Collections.sort(infoIds, new Comparator<Map.Entry<String, Double>>() {        //排序
             public int compare(Map.Entry<String, Double> o1, Map.Entry<String, Double> o2) {
@@ -306,31 +306,31 @@ public class ShowMapActivityFragment extends Fragment {
         return list;     //排序好的MAC地址的列表
     }
 
-    public Double[] getNearestNode (List<String> m3,Map<String,Double[]> bleDevLoc){
+    public Double[] getNearestNode (List<String> listSortedNode,Map<String,Double[]> bleNodeLoc){
         Double[] location =  new Double[2];
-        String A = m3.get(0);
-        location[0] = bleDevLoc.get(A)[0];
-        location[1] = bleDevLoc.get(A)[1];
+        String A = listSortedNode.get(0);
+        location[0] = bleNodeLoc.get(A)[0];
+        location[1] = bleNodeLoc.get(A)[1];
         return location;
     }
 
-    public Double[] getMassCenterLocation (ArrayList<String> m3,Map<String,Double[]> bleDevLoc){
+    public Double[] getMassCenterLocation (ArrayList<String> listSortedNode,Map<String,Double[]> bleNodeLoc){
         Double[] location =  new Double[2];
-        String A = m3.get(0),B = m3.get(1), C = m3.get(2);
-        Double Ax = bleDevLoc.get(A)[0], Ay = bleDevLoc.get(A)[1], Bx = bleDevLoc.get(B)[0], By = bleDevLoc.get(B)[1], Cx = bleDevLoc.get(C)[0], Cy = bleDevLoc.get(C)[1];
+        String A = listSortedNode.get(0),B = listSortedNode.get(1), C = listSortedNode.get(2);
+        Double Ax = bleNodeLoc.get(A)[0], Ay = bleNodeLoc.get(A)[1], Bx = bleNodeLoc.get(B)[0], By = bleNodeLoc.get(B)[1], Cx = bleNodeLoc.get(C)[0], Cy = bleNodeLoc.get(C)[1];
         location[0] = 1.0/3 * ((Ax) + 0.5 * (Ax+Bx) + 0.5 * (Bx+Cx));
         location[1] = 1.0/3 * ((Ay) + 0.5 * (Ay+By) + 0.5 * (By+Cy));
-        Log.d("m3",m3.toString());
+        Log.d("listSortedNode",listSortedNode.toString());
         Log.d("location", Arrays.toString(location));
         return location;
     }
 
 
     //从MAP中选出 list中元素作为键，对应的键值对
-    public synchronized  Map<String, List<Double>> getMapForStore (List<String> m3, Map<String,List<Double>> map){
+    public synchronized  Map<String, List<Double>> getMapForStore (List<String> listSortedNode, Map<String,List<Double>> map){
         Map<String,List<Double>> mapReturn = new HashMap<>();
-        for (int i = 0 ; i < m3.size(); i++){
-            String mac = m3.get(i);
+        for (int i = 0 ; i < listSortedNode.size(); i++){
+            String mac = listSortedNode.get(i);
             List<Double> listRssi = map.get(mac);
             mapReturn.put(mac,listRssi);
         }
@@ -378,16 +378,16 @@ public class ShowMapActivityFragment extends Fragment {
         Double[] location29 = {15.8, 8.7};
         Double[] location30 = {19.8, 8.7};
 
-        bleDevLoc.put("19:18:FC:01:F1:0E",location21);
-        bleDevLoc.put("19:18:FC:01:F1:0F",location22);
-        bleDevLoc.put("19:18:FC:01:F0:F8",location23);
-        bleDevLoc.put("19:18:FC:01:F0:F9",location24);
-        bleDevLoc.put("19:18:FC:01:F0:FA",location25);
-        bleDevLoc.put("19:18:FC:01:F0:FB",location26);
-        bleDevLoc.put("19:18:FC:01:F0:FC",location27);
-        bleDevLoc.put("19:18:FC:01:F0:FD",location28);
-        bleDevLoc.put("19:18:FC:01:F0:FE",location29);
-        bleDevLoc.put("19:18:FC:01:F0:FF",location30);
+        bleNodeLoc.put("19:18:FC:01:F1:0E",location21);
+        bleNodeLoc.put("19:18:FC:01:F1:0F",location22);
+        bleNodeLoc.put("19:18:FC:01:F0:F8",location23);
+        bleNodeLoc.put("19:18:FC:01:F0:F9",location24);
+        bleNodeLoc.put("19:18:FC:01:F0:FA",location25);
+        bleNodeLoc.put("19:18:FC:01:F0:FB",location26);
+        bleNodeLoc.put("19:18:FC:01:F0:FC",location27);
+        bleNodeLoc.put("19:18:FC:01:F0:FD",location28);
+        bleNodeLoc.put("19:18:FC:01:F0:FE",location29);
+        bleNodeLoc.put("19:18:FC:01:F0:FF",location30);
 
         initBluetooth();
     }
