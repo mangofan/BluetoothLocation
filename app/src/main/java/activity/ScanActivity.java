@@ -140,7 +140,7 @@ public class ScanActivity extends AppCompatActivity{
         },0,TIME0);
     }
 
-    //注册事件监听器
+    //事件监听器
     private SensorEventListener listener = new SensorEventListener() {
 
         @Override
@@ -169,10 +169,13 @@ public class ScanActivity extends AppCompatActivity{
             public void run() {
 //                String need1 = String.valueOf(rotVecValues[0]) + '\n' + String.valueOf(rotVecValues[1]) + '\n' + String.valueOf(rotVecValues[2]) + '\n' + String.valueOf(rotVecValues[3]) + '\n';  //展示Sx，Sy，ax，ay
 //                scanText1.setText(need1);
-                String need2 = String.valueOf(accValues[0]) + '\n' + String.valueOf(accValues[1]) + '\n' + String.valueOf(accValues[2]) + '\n';  //展示Sx，Sy，ax，ay
-                scanText2.setText(need2);
-                String need3 = String.valueOf(gyroValues[0]) + '\n' + String.valueOf(gyroValues[1]) + '\n' + String.valueOf(gyroValues[2]) + '\n' ;  //展示Sx，Sy，ax，ay
-                scanText3.setText(need3);
+//                String need2 = String.valueOf(accValues[0]) + '\n' + String.valueOf(accValues[1]) + '\n' + String.valueOf(accValues[2]) + '\n';  //展示Sx，Sy，ax，ay
+//                scanText2.setText(need2);
+//                String need3 = String.valueOf(gyroValues[0]) + '\n' + String.valueOf(gyroValues[1]) + '\n' + String.valueOf(gyroValues[2]) + '\n' ;  //展示Sx，Sy，ax，ay
+//                scanText3.setText(need3);
+                float[] rotationMatrix = new float[9];
+                SensorManager.getRotationMatrixFromVector(rotationMatrix, rotVecValues);
+
             }
         });
     }

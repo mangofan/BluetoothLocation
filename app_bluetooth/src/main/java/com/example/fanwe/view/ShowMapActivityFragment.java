@@ -1,5 +1,6 @@
 package com.example.fanwe.view;
 
+import android.app.Activity;
 import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothDevice;
 import android.content.BroadcastReceiver;
@@ -7,6 +8,10 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.graphics.Color;
+import android.hardware.Sensor;
+import android.hardware.SensorEvent;
+import android.hardware.SensorEventListener;
+import android.hardware.SensorManager;
 import android.os.Bundle;
 import android.support.v4.app.Fragment;
 import android.util.Log;
@@ -32,6 +37,8 @@ import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Timer;
+import java.util.TimerTask;
 
 import utils.FileCache;
 
@@ -47,94 +54,10 @@ public class ShowMapActivityFragment extends Fragment {
     WebView webView;
     TextView mtext;
 
-    public ShowMapActivityFragment() {
-
-    }
-
-    private String setInsetJS(String rx,String ry) {
-        return "javascript:{" +
-                "\t$(\"#circle_point\").attr(\"cx\",\""+rx+"\");\n" +
-                "\t$(\"#circle_point\").attr(\"cy\",\""+ry+"\");\n" +
-                "\n" +
-                "" +
-                "}";
-    }
-
-    @Override
-    public View onCreateView(LayoutInflater inflater, ViewGroup container,
-                             Bundle savedInstanceState) {
-        View root =inflater.inflate(R.layout.fragment_show_map,null);
-     //   mPathView= (PathView) root.findViewById(pathView);
-        webView= (WebView) root.findViewById(webview);
-        mtext= (TextView) root.findViewById(textView2);
-        initWebview();
-        initlocation();
-        init();
-        EventBus.getDefault().register(this);
-
-        /** 模拟 定位位置变化的 代码  测试*/
-//        new Thread(new Runnable() {
-//            Random random=new Random(10);
-//
-//            @Override
-//            public void run() {
-//                while(true) {
-//                    final double rx = random.nextFloat()*20 + 1;
-//                    final double ry = random.nextFloat()*12+ 1;
-//                    getActivity().runOnUiThread(new Runnable() {
-//                        @Override
-//                        public void run() {
-//                            webView.loadUrl(setInsetJS(rx + "", ry + ""));
-//                        }
-//                    });
-//
-//
-//                    try {
-//                        Thread.sleep(500);
-//                    } catch (InterruptedException e) {
-//                        e.printStackTrace();
-//                    }
-//                }
-//            }
-//        }
-//        ).start();
-
-        return root;
-    }
-
-    private void init() {
-        mAllRssi=Collections.synchronizedMap(mAllRssi);
-        mRssiFilterd=Collections.synchronizedMap(mRssiFilterd);
-        listSortedNode=Collections.synchronizedList(listSortedNode);
-        mTest=Collections.synchronizedMap(mTest);
-
-    }
-
-    private void initWebview() {
-        WebSettings settings = webView.getSettings();
-        settings.setJavaScriptEnabled(true);
-
-        settings.setLoadWithOverviewMode(true);
-        settings.setUseWideViewPort(true);
-        //设置字符编码
-        settings.setDefaultTextEncodingName("utf-8");
-        // 支持缩放
-        settings.setSupportZoom(true);
-        // //启用内置缩放装置
-        settings.setBuiltInZoomControls(true);
-        // 支持自动加载图片
-        settings.setLoadsImagesAutomatically(true);
-        // 支持内容重新布局
-        settings.setLayoutAlgorithm(WebSettings.LayoutAlgorithm.SINGLE_COLUMN);
-//        webView.addJavascriptInterface(new CommodityData(getApplicationContext(), serializableMap, "ProductManageDetail"), "ProductManage");
-        // webView.loadUrl("file:///android_asset/svg/10072_1.svg");
-        webView.setBackgroundColor(Color.TRANSPARENT);
-        webView.loadUrl("file:///android_asset/svg/10072_1.html");
-    }
-
     private static final int ENABLE_BLUETOOTH = 1;
     int RSSI_LIMIT = 8, BLE_CHOOSED_NUM = 3;
 
+    //蓝牙有关的参数
     Double[] location = new Double[2];
     Map<String,List<Double>> mAllRssi = new HashMap<>();  //储存RSSI的MAP
     Map<String,List<Double>> mTest = new HashMap<>();  //储存键为MAC地址，值为过滤后的RSSI的MAP
@@ -143,6 +66,79 @@ public class ShowMapActivityFragment extends Fragment {
     StringBuffer stringBuffer = new StringBuffer();
     Map<String,Double[]> bleNodeLoc = new HashMap<>(); //固定节点的位置Map
     BluetoothAdapter bluetoothAdapter = BluetoothAdapter.getDefaultAdapter();
+
+    //传感器有关的参数
+    Integer TIME0 = 200;
+    float[] rotVecValues = {0,0,0,0}, accValues = {0,0,0}, gyroValues = {0,0,0};
+
+
+
+    @Override
+    public View onCreateView(LayoutInflater inflater, ViewGroup container,
+                             Bundle savedInstanceState) {
+        View root =inflater.inflate(R.layout.fragment_show_map,null);
+        webView= (WebView) root.findViewById(webview);
+        mtext= (TextView) root.findViewById(textView2);
+        initWebview();
+        initlocation();
+        initBluetooth();
+        initSynchronize();
+        initSensor();
+        //设置每隔TIME0更新UI
+        Timer updateTimer = new Timer("Update");
+        updateTimer.scheduleAtFixedRate(new TimerTask()
+        {
+            @Override
+            public void run()
+            {
+                updateGUI();
+            }
+        },0,TIME0);
+        EventBus.getDefault().register(this);
+        return root;
+    }
+
+
+    //UI 更新方法
+    private void updateGUI(){
+        getActivity().runOnUiThread(new Runnable() {
+            @Override
+            public void run() {
+//                String need1 = String.valueOf(rotVecValues[0]) + '\n' + String.valueOf(rotVecValues[1]) + '\n' + String.valueOf(rotVecValues[2]) + '\n' + String.valueOf(rotVecValues[3]) + '\n';  //展示Sx，Sy，ax，ay
+//                scanText1.setText(need1);
+//                String need2 = String.valueOf(accValues[0]) + '\n' + String.valueOf(accValues[1]) + '\n' + String.valueOf(accValues[2]) + '\n';  //展示Sx，Sy，ax，ay
+//                scanText2.setText(need2);
+//                String need3 = String.valueOf(gyroValues[0]) + '\n' + String.valueOf(gyroValues[1]) + '\n' + String.valueOf(gyroValues[2]) + '\n' ;  //展示Sx，Sy，ax，ay
+//                scanText3.setText(need3);
+                float[] rotationMatrix = new float[9];
+                SensorManager.getRotationMatrixFromVector(rotationMatrix, rotVecValues);
+
+            }
+        });
+    }
+
+
+    //事件监听器
+    private SensorEventListener listener = new SensorEventListener() {
+
+        @Override
+        public void onSensorChanged(SensorEvent event) {
+            switch (event.sensor.getType()){
+                case Sensor.TYPE_ROTATION_VECTOR :
+                    rotVecValues = event.values.clone();
+                    break;
+                case Sensor.TYPE_GYROSCOPE :
+                    gyroValues = event.values.clone();
+                    break;
+                case Sensor.TYPE_ACCELEROMETER :
+                    accValues = event.values.clone();
+                    break;
+            }
+        }
+        @Override
+        public void onAccuracyChanged(Sensor sensor, int accuracy) {
+        }
+    };
 
     public BroadcastReceiver mReceiver = new BroadcastReceiver() {
         String dFinished = BluetoothAdapter.ACTION_DISCOVERY_FINISHED;
@@ -169,7 +165,7 @@ public class ShowMapActivityFragment extends Fragment {
                             }
                             final List<Double> rssiValueFilterd = LogarNormalDistribution(mAllRssi.get(remoteMAC));  //获取滤波后的信号强度表
                             mTest.put(remoteMAC, rssiValueFilterd);
-                            mRssiFilterd.put(remoteMAC, GetAvg(rssiValueFilterd));   //更新MAC地址对应信号强度的map
+                            mRssiFilterd.put(remoteMAC, getAvg(rssiValueFilterd));   //更新MAC地址对应信号强度的map
                             if (mRssiFilterd.size() > 2) {
                                 listSortedNode = getSort(mRssiFilterd, BLE_CHOOSED_NUM);     //得到按距离排序的蓝牙节点的列表
                                 location = getNearestNode(listSortedNode, bleNodeLoc);   //定位为最近的节点的位置。
@@ -178,25 +174,25 @@ public class ShowMapActivityFragment extends Fragment {
                                 String need = listSortedNode.get(0).split(":")[5];
                                 mtext.setText(need);
                                 webView.loadUrl(setInsetJS(location[0] + "", location[1] + ""));
-    //                            Calendar now = Calendar.getInstance();
-    //                            Integer minute = now.get(Calendar.MINUTE);
-    //                            Integer second = now.get(Calendar.SECOND);
-    //                            String string = minute.toString() + ":" + second.toString() + " " + Arrays.toString(location) + "\n";
-    //                            stringBuffer.append(string);
 
                                 Thread thread = new Thread(new Runnable() {
                                     @Override
                                     public void run() {
-                                        Calendar now = Calendar.getInstance();
-                                        Integer minute = now.get(Calendar.MINUTE);
-                                        Integer second = now.get(Calendar.SECOND);
-                                        Map<String, List<Double>> mapForStore = getMapForStore(listSortedNode, mAllRssi);
-                                        Map<String, List<Double>> mapForStore1 = getMapForStore(listSortedNode, mTest);
-                                        String need1 = "{" + location[0].toString() + "   " + location[1].toString() + "     "
-                                                + minute.toString() + ":" + second.toString() + "\n"
-                                                + mapForStore + "\n"
-                                                + mapForStore1 + "\n" + "}";
-                                        FileCache.saveFile(need1);
+                                        try {
+                                            Calendar now = Calendar.getInstance();
+                                            Integer minute = now.get(Calendar.MINUTE);
+                                            Integer second = now.get(Calendar.SECOND);
+                                            Map<String, List<Double>> mapForStore = getMapForStore(listSortedNode, mAllRssi);
+                                            Map<String, List<Double>> mapForStore1 = getMapForStore(listSortedNode, mTest);
+                                            String need1 = "{" + location[0].toString() + "   " + location[1].toString() + "     "
+                                                    + minute.toString() + ":" + second.toString() + "\n"
+                                                    + mapForStore + "\n"
+                                                    + mapForStore1 + "\n" + "}";
+                                            FileCache.saveFile(need1);
+                                        }catch(Exception e){
+                                            e.printStackTrace();
+
+                                        }
                                     }
                                 });
 
@@ -209,6 +205,7 @@ public class ShowMapActivityFragment extends Fragment {
         }
     };
 
+    //对数正态滤波
     private List<Double> LogarNormalDistribution(List<Double> mAllRssilist){
         ArrayList<Double> value = new ArrayList<>();
         if( mAllRssilist.size() > RSSI_LIMIT){             //截取长度合适RSSI字符串,长于15时截取前15个
@@ -224,8 +221,8 @@ public class ShowMapActivityFragment extends Fragment {
         Double avg, staDev, proLowLim, proHighLim, pdfAltered ;  //rssiValue作为一个中间变量在多个计算过程中间使用
 
         ArrayList<Double> logarNormalList = GetLogarNormalList(value);   //转换成对数形式
-        avg = GetAvg(logarNormalList);   //求均值
-        staDev = GetStaDev(logarNormalList, avg, "logarNormal");  //求标准差
+        avg = getAvg(logarNormalList);   //求均值
+        staDev = getStaDev(logarNormalList, avg, "logarNormal");  //求标准差
 
         if(staDev != 0) {
             proHighLim = Math.exp(0.5 * Math.pow(staDev,2) - avg) / (staDev * Math.sqrt(2 * Math.PI));
@@ -243,14 +240,14 @@ public class ShowMapActivityFragment extends Fragment {
         }
 
 //        if(value.size() != 0) {
-//            avg = GetAvg(value);               //重新获取RSSI的平均值
+//            avg = getAvg(value);               //重新获取RSSI的平均值
 //        }
 
         return value;
     }
 
-    //给ArrayLIst产生均值的函数
-    private Double GetAvg(List<Double> list){
+    //求ArrayLIst均值
+    private Double getAvg(List<Double> list){
         Double sum = 0.0, avg = 0.0;
         if (list.size() != 0) {
             for (int i = 0; i < list.size(); i++) {
@@ -261,8 +258,8 @@ public class ShowMapActivityFragment extends Fragment {
         return avg;
     }
 
-    //给ArrayList产生标准差的函数
-    private Double GetStaDev(ArrayList<Double> list, Double avg, String distribution){
+    //求ArrayList标准差
+    private Double getStaDev(ArrayList<Double> list, Double avg, String distribution){
         Double stadardDev = 0.0;
         if (list.size() > 1) {
             for (int i = 0; i < list.size(); i++) {
@@ -277,7 +274,7 @@ public class ShowMapActivityFragment extends Fragment {
         return stadardDev;
     }
 
-    //给ArrayList每个值取对数，以应用于对数正态运算的函数
+    //对ArrayList每个值取对数，以应用于对数正态运算的函数
     private ArrayList<Double> GetLogarNormalList(ArrayList<Double> list){
         ArrayList<Double> list1 = new ArrayList<>();
         for (int i = 0; i < list.size(); i++){
@@ -286,7 +283,7 @@ public class ShowMapActivityFragment extends Fragment {
         return list1;
     }
 
-    //给RSSI排序
+    //根据RSSI强度，对MAC地址排序
     public ArrayList<String> getSort(Map<String, Double> mRssiFilterd, int BLE_CHOOSED_NUM){
         List<Map.Entry<String, Double>> infoIds =
                 new ArrayList<>(mRssiFilterd.entrySet());
@@ -306,6 +303,7 @@ public class ShowMapActivityFragment extends Fragment {
         return list;     //排序好的MAC地址的列表
     }
 
+    //根据RSSI强度，得到最近的蓝牙节点
     public Double[] getNearestNode (List<String> listSortedNode,Map<String,Double[]> bleNodeLoc){
         Double[] location =  new Double[2];
         String A = listSortedNode.get(0);
@@ -314,6 +312,7 @@ public class ShowMapActivityFragment extends Fragment {
         return location;
     }
 
+    //使用质心定位得到坐标
     public Double[] getMassCenterLocation (ArrayList<String> listSortedNode,Map<String,Double[]> bleNodeLoc){
         Double[] location =  new Double[2];
         String A = listSortedNode.get(0),B = listSortedNode.get(1), C = listSortedNode.get(2);
@@ -324,7 +323,6 @@ public class ShowMapActivityFragment extends Fragment {
         Log.d("location", Arrays.toString(location));
         return location;
     }
-
 
     //从MAP中选出 list中元素作为键，对应的键值对
     public synchronized  Map<String, List<Double>> getMapForStore (List<String> listSortedNode, Map<String,List<Double>> map){
@@ -337,6 +335,24 @@ public class ShowMapActivityFragment extends Fragment {
         return mapReturn;
     }
 
+    //初始化需要加同步锁的变量
+    private void initSynchronize() {
+        mAllRssi=Collections.synchronizedMap(mAllRssi);
+        mRssiFilterd=Collections.synchronizedMap(mRssiFilterd);
+        listSortedNode=Collections.synchronizedList(listSortedNode);
+        mTest=Collections.synchronizedMap(mTest);
+    }
+
+    //和sensor有关的初始化
+    private void initSensor(){
+        SensorManager sensorManager = (SensorManager)getActivity().getSystemService(Context.SENSOR_SERVICE);
+        Sensor rotVectorSensor = sensorManager.getDefaultSensor(Sensor.TYPE_ROTATION_VECTOR);
+        Sensor accSensor = sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER);
+        Sensor gyroSensor = sensorManager.getDefaultSensor(Sensor.TYPE_GYROSCOPE);
+        sensorManager.registerListener(listener, rotVectorSensor, SensorManager.SENSOR_DELAY_GAME);
+        sensorManager.registerListener(listener,accSensor,SensorManager.SENSOR_DELAY_GAME);
+        sensorManager.registerListener(listener,gyroSensor,SensorManager.SENSOR_DELAY_GAME);
+    }
 
 
 
@@ -366,6 +382,10 @@ public class ShowMapActivityFragment extends Fragment {
 
 
 
+
+
+
+    //初始化已知蓝牙节点信息
     void initlocation() {
         Double[] location21 = {11.5,0.7};
         Double[] location22 = {15.8,0.7};
@@ -388,8 +408,6 @@ public class ShowMapActivityFragment extends Fragment {
         bleNodeLoc.put("19:18:FC:01:F0:FD",location28);
         bleNodeLoc.put("19:18:FC:01:F0:FE",location29);
         bleNodeLoc.put("19:18:FC:01:F0:FF",location30);
-
-        initBluetooth();
     }
 
     @Override
@@ -415,6 +433,7 @@ public class ShowMapActivityFragment extends Fragment {
 
     }
 
+    //提示用户开启手机蓝牙
     private void initBluetooth(){
         if(!bluetoothAdapter.isEnabled()){
             //蓝牙未打开，提醒用户打开
@@ -423,17 +442,51 @@ public class ShowMapActivityFragment extends Fragment {
         }
     }
 
-    @Subscribe(threadMode= ThreadMode.MAIN)
-    public void startDiscovery(String  startloaction){
-        getActivity().registerReceiver(mReceiver,new IntentFilter((BluetoothDevice.ACTION_FOUND)));
-        if(bluetoothAdapter.isEnabled() && !bluetoothAdapter.isDiscovering())
-            bluetoothAdapter.startDiscovery();
-        getActivity().registerReceiver(mReceiver, new IntentFilter(BluetoothAdapter.ACTION_DISCOVERY_FINISHED));
-    }
-    @Subscribe(threadMode= ThreadMode.MAIN)
-    public void stopDiscovery(Stop  stop){
-        getActivity().unregisterReceiver(mReceiver);
+//    @Subscribe(threadMode= ThreadMode.MAIN)
+//    public void startDiscovery(String  startloaction){
+//        getActivity().registerReceiver(mReceiver,new IntentFilter((BluetoothDevice.ACTION_FOUND)));
+//        if(bluetoothAdapter.isEnabled() && !bluetoothAdapter.isDiscovering())
+//            bluetoothAdapter.startDiscovery();
+//        getActivity().registerReceiver(mReceiver, new IntentFilter(BluetoothAdapter.ACTION_DISCOVERY_FINISHED));
+//    }
+//    @Subscribe(threadMode= ThreadMode.MAIN)
+//    public void stopDiscovery(Stop  stop){
+//        getActivity().unregisterReceiver(mReceiver);
+//
+//    }
 
+    public ShowMapActivityFragment() {
+
+    }
+
+    private String setInsetJS(String rx,String ry) {
+        return "javascript:{" +
+                "\t$(\"#circle_point\").attr(\"cx\",\""+rx+"\");\n" +
+                "\t$(\"#circle_point\").attr(\"cy\",\""+ry+"\");\n" +
+                "\n" +
+                "" +
+                "}";
+    }
+    private void initWebview() {
+        WebSettings settings = webView.getSettings();
+        settings.setJavaScriptEnabled(true);
+
+        settings.setLoadWithOverviewMode(true);
+        settings.setUseWideViewPort(true);
+        //设置字符编码
+        settings.setDefaultTextEncodingName("utf-8");
+        // 支持缩放
+        settings.setSupportZoom(true);
+        // //启用内置缩放装置
+        settings.setBuiltInZoomControls(true);
+        // 支持自动加载图片
+        settings.setLoadsImagesAutomatically(true);
+        // 支持内容重新布局
+        settings.setLayoutAlgorithm(WebSettings.LayoutAlgorithm.SINGLE_COLUMN);
+//        webView.addJavascriptInterface(new CommodityData(getApplicationContext(), serializableMap, "ProductManageDetail"), "ProductManage");
+        // webView.loadUrl("file:///android_asset/svg/10072_1.svg");
+        webView.setBackgroundColor(Color.TRANSPARENT);
+        webView.loadUrl("file:///android_asset/svg/10072_1.html");
     }
 }
 
