@@ -29,6 +29,7 @@ import org.greenrobot.eventbus.EventBus;
 import org.greenrobot.eventbus.Subscribe;
 import org.greenrobot.eventbus.ThreadMode;
 
+import java.lang.reflect.Array;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Calendar;
@@ -110,15 +111,19 @@ public class ShowMapActivityFragment extends Fragment {
 //                scanText2.setText(need2);
 //                String need3 = String.valueOf(gyroValues[0]) + '\n' + String.valueOf(gyroValues[1]) + '\n' + String.valueOf(gyroValues[2]) + '\n' ;  //展示Sx，Sy，ax，ay
 //                scanText3.setText(need3);
-                float[] rotationMatrix = new float[9];
-                SensorManager.getRotationMatrixFromVector(rotationMatrix, rotVecValues);
+//                float[] rotationMatrix = new float[9];
+                float[] pQuaternion = new float[4];
+                SensorManager.getQuaternionFromVector(pQuaternion, rotVecValues);
+                Double[] accConverted = getConvertAcc(getAccCompleted(accValues), pQuaternion);
+                String need1 = String.valueOf(accConverted[0]) + '\n' + String.valueOf(accConverted[1]) + '\n' + String.valueOf(accConverted[2]) + '\n';  //展示Sx，Sy，ax，ay
+                mtext.setText(need1);
+
 
             }
         });
     }
 
-
-    //事件监听器
+    //传感器事件监听器
     private SensorEventListener listener = new SensorEventListener() {
 
         @Override
@@ -139,6 +144,46 @@ public class ShowMapActivityFragment extends Fragment {
         public void onAccuracyChanged(Sensor sensor, int accuracy) {
         }
     };
+
+    //加速度矢量补全为四元数
+    public float[] getAccCompleted(float[] acc){
+        float[] accCompleted = new float[4];
+        accCompleted[0] = 0.0f;
+        accCompleted[1] = acc[0];
+        accCompleted[2] = acc[1];
+        accCompleted[3] = acc[2];
+        return accCompleted;
+    }
+    //四元数乘法
+    public float[] getQuaternionMulit(float[] Q1, float[] Q2){
+        float[] Q3 = new float[4];
+        Q3[0] = Q1[0]*Q2[0] - Q1[1]*Q2[1] - Q1[2]*Q2[2] - Q1[3]*Q2[3];
+        Q3[1] = Q1[0]*Q2[1] + Q1[1]*Q2[0] + Q1[2]*Q2[3] - Q1[3]*Q2[2];
+        Q3[2] = Q1[0]*Q2[2] + Q1[2]*Q1[0] + Q1[3]*Q1[1] - Q1[1]*Q1[3];
+        Q3[3] = Q1[0]*Q2[3] + Q1[3]*Q1[0] + Q1[1]*Q1[2] - Q1[2]*Q1[1];
+        return Q3;
+    }
+    //四元数取逆
+    public float[] getQuaternionInverse(float[] q){
+        float[] q_1 = new float[4];
+        q_1[0] = q[0];
+        q_1[1] = -q[1];
+        q_1[2] = -q[2];
+        q_1[3] = -q[3];
+        return q_1;
+    }
+    //根据四元数转换方式，将加速度矢量转换到地理坐标系
+    public Double[] getConvertAcc(float[] p_1 , float[] q){
+        float[] q_1p_1 = getQuaternionMulit(getQuaternionInverse(q), p_1);
+        float[] p = getQuaternionMulit(q_1p_1, q);
+        Double[] pDouble = new Double[4];
+        pDouble[0] = Double.valueOf(String.valueOf(p[0]));
+        pDouble[1] = Double.valueOf(String.valueOf(p[1]));
+        pDouble[2] = Double.valueOf(String.valueOf(p[2]));
+        pDouble[3] = Double.valueOf(String.valueOf(p[3]));
+        return pDouble;
+    }
+
 
     public BroadcastReceiver mReceiver = new BroadcastReceiver() {
         String dFinished = BluetoothAdapter.ACTION_DISCOVERY_FINISHED;
@@ -195,10 +240,8 @@ public class ShowMapActivityFragment extends Fragment {
                                         }
                                     }
                                 });
-
                                 thread.start();
                         }
-
                     }
                 }
             }
@@ -442,18 +485,18 @@ public class ShowMapActivityFragment extends Fragment {
         }
     }
 
-//    @Subscribe(threadMode= ThreadMode.MAIN)
-//    public void startDiscovery(String  startloaction){
-//        getActivity().registerReceiver(mReceiver,new IntentFilter((BluetoothDevice.ACTION_FOUND)));
-//        if(bluetoothAdapter.isEnabled() && !bluetoothAdapter.isDiscovering())
-//            bluetoothAdapter.startDiscovery();
-//        getActivity().registerReceiver(mReceiver, new IntentFilter(BluetoothAdapter.ACTION_DISCOVERY_FINISHED));
-//    }
-//    @Subscribe(threadMode= ThreadMode.MAIN)
-//    public void stopDiscovery(Stop  stop){
-//        getActivity().unregisterReceiver(mReceiver);
-//
-//    }
+    @Subscribe(threadMode= ThreadMode.MAIN)
+    public void startDiscovery(String  startloaction){
+        getActivity().registerReceiver(mReceiver,new IntentFilter((BluetoothDevice.ACTION_FOUND)));
+        if(bluetoothAdapter.isEnabled() && !bluetoothAdapter.isDiscovering())
+            bluetoothAdapter.startDiscovery();
+        getActivity().registerReceiver(mReceiver, new IntentFilter(BluetoothAdapter.ACTION_DISCOVERY_FINISHED));
+    }
+    @Subscribe(threadMode= ThreadMode.MAIN)
+    public void stopDiscovery(Stop  stop){
+        getActivity().unregisterReceiver(mReceiver);
+
+    }
 
     public ShowMapActivityFragment() {
 
