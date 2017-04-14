@@ -113,11 +113,10 @@ public class ShowMapActivityFragment extends Fragment {
 //                scanText3.setText(need3);
 //                float[] rotationMatrix = new float[9];
                 float[] pQuaternion = new float[4];
-                SensorManager.getQuaternionFromVector(pQuaternion, rotVecValues);
-                Double[] accConverted = getConvertAcc(getAccCompleted(accValues), pQuaternion);
-                String need1 = String.valueOf(accConverted[0]) + '\n' + String.valueOf(accConverted[1]) + '\n' + String.valueOf(accConverted[2]) + '\n';  //展示Sx，Sy，ax，ay
+                SensorManager.getQuaternionFromVector(pQuaternion, rotVecValues);  //由旋转矢量获得四元数
+                Double[] accConverted = getConvertAcc(getAccCompleted(accValues), pQuaternion);  //将加速度矢量转换到地理坐标系
+                String need1 = String.valueOf(accConverted[0]) + '\n' + String.valueOf(accConverted[1]) + '\n' + String.valueOf(accConverted[2]) + '\n';  //
                 mtext.setText(need1);
-
 
             }
         });
@@ -159,10 +158,11 @@ public class ShowMapActivityFragment extends Fragment {
         float[] Q3 = new float[4];
         Q3[0] = Q1[0]*Q2[0] - Q1[1]*Q2[1] - Q1[2]*Q2[2] - Q1[3]*Q2[3];
         Q3[1] = Q1[0]*Q2[1] + Q1[1]*Q2[0] + Q1[2]*Q2[3] - Q1[3]*Q2[2];
-        Q3[2] = Q1[0]*Q2[2] + Q1[2]*Q1[0] + Q1[3]*Q1[1] - Q1[1]*Q1[3];
-        Q3[3] = Q1[0]*Q2[3] + Q1[3]*Q1[0] + Q1[1]*Q1[2] - Q1[2]*Q1[1];
+        Q3[2] = Q1[0]*Q2[2] + Q1[2]*Q2[0] + Q1[3]*Q2[1] - Q1[1]*Q2[3];
+        Q3[3] = Q1[0]*Q2[3] + Q1[3]*Q2[0] + Q1[1]*Q2[2] - Q1[2]*Q2[1];
         return Q3;
     }
+
     //四元数取逆
     public float[] getQuaternionInverse(float[] q){
         float[] q_1 = new float[4];
@@ -176,11 +176,10 @@ public class ShowMapActivityFragment extends Fragment {
     public Double[] getConvertAcc(float[] p_1 , float[] q){
         float[] q_1p_1 = getQuaternionMulit(getQuaternionInverse(q), p_1);
         float[] p = getQuaternionMulit(q_1p_1, q);
-        Double[] pDouble = new Double[4];
-        pDouble[0] = Double.valueOf(String.valueOf(p[0]));
-        pDouble[1] = Double.valueOf(String.valueOf(p[1]));
-        pDouble[2] = Double.valueOf(String.valueOf(p[2]));
-        pDouble[3] = Double.valueOf(String.valueOf(p[3]));
+        Double[] pDouble = new Double[3];
+        pDouble[0] = Double.valueOf(String.valueOf(p[1]));
+        pDouble[1] = Double.valueOf(String.valueOf(p[2]));
+        pDouble[2] = Double.valueOf(String.valueOf(p[3]));
         return pDouble;
     }
 
