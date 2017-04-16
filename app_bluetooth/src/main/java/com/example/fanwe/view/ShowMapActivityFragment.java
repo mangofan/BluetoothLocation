@@ -15,6 +15,7 @@ import android.hardware.SensorManager;
 import android.os.Bundle;
 import android.support.v4.app.Fragment;
 import android.util.Log;
+import android.util.SparseArray;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -43,6 +44,7 @@ import java.util.TimerTask;
 
 import utils.FileCache;
 
+import static com.example.fanwe.bluetoothlocation.R.id.textView1;
 import static com.example.fanwe.bluetoothlocation.R.id.textView2;
 import static com.example.fanwe.bluetoothlocation.R.id.webview;
 
@@ -53,7 +55,8 @@ public class ShowMapActivityFragment extends Fragment {
 
     PathView mPathView;
     WebView webView;
-    TextView mtext;
+    TextView mtext1;
+    TextView mtext2;
 
     private static final int ENABLE_BLUETOOTH = 1;
     int RSSI_LIMIT = 8, BLE_CHOOSED_NUM = 3;
@@ -71,6 +74,7 @@ public class ShowMapActivityFragment extends Fragment {
     //传感器有关的参数
     Integer TIME0 = 200;
     float[] rotVecValues = {0,0,0,0}, accValues = {0,0,0}, gyroValues = {0,0,0};
+    SparseArray<ArrayList<Float>> accValueList = new SparseArray<>();   //维持一定时间内的加速计历次读数的列表
 
 
 
@@ -79,7 +83,8 @@ public class ShowMapActivityFragment extends Fragment {
                              Bundle savedInstanceState) {
         View root =inflater.inflate(R.layout.fragment_show_map,null);
         webView= (WebView) root.findViewById(webview);
-        mtext= (TextView) root.findViewById(textView2);
+        mtext1 = (TextView)root.findViewById(textView1);
+        mtext2= (TextView) root.findViewById(textView2);
         initWebview();
         initlocation();
         initBluetooth();
@@ -105,18 +110,13 @@ public class ShowMapActivityFragment extends Fragment {
         getActivity().runOnUiThread(new Runnable() {
             @Override
             public void run() {
-//                String need1 = String.valueOf(rotVecValues[0]) + '\n' + String.valueOf(rotVecValues[1]) + '\n' + String.valueOf(rotVecValues[2]) + '\n' + String.valueOf(rotVecValues[3]) + '\n';  //展示Sx，Sy，ax，ay
-//                scanText1.setText(need1);
-//                String need2 = String.valueOf(accValues[0]) + '\n' + String.valueOf(accValues[1]) + '\n' + String.valueOf(accValues[2]) + '\n';  //展示Sx，Sy，ax，ay
-//                scanText2.setText(need2);
-//                String need3 = String.valueOf(gyroValues[0]) + '\n' + String.valueOf(gyroValues[1]) + '\n' + String.valueOf(gyroValues[2]) + '\n' ;  //展示Sx，Sy，ax，ay
-//                scanText3.setText(need3);
-//                float[] rotationMatrix = new float[9];
                 float[] pQuaternion = new float[4];
                 SensorManager.getQuaternionFromVector(pQuaternion, rotVecValues);  //由旋转矢量获得四元数
                 Double[] accConverted = getConvertAcc(getAccCompleted(accValues), pQuaternion);  //将加速度矢量转换到地理坐标系
-                String need1 = String.valueOf(accConverted[0]) + '\n' + String.valueOf(accConverted[1]) + '\n' + String.valueOf(accConverted[2]) + '\n';  //
-                mtext.setText(need1);
+                String acc = String.valueOf(accConverted[0]) + '\n' + String.valueOf(accConverted[1]) + '\n' + String.valueOf(accConverted[2]) + '\n';  //
+                mtext1.setText(acc);
+                String gyro = String.valueOf(gyroValues[0]) + '\n' + String.valueOf(gyroValues[1]) + '\n' + String.valueOf(gyroValues[2]);
+                mtext2.setText(gyro);
 
             }
         });
@@ -133,9 +133,11 @@ public class ShowMapActivityFragment extends Fragment {
                     break;
                 case Sensor.TYPE_GYROSCOPE :
                     gyroValues = event.values.clone();
+                    filterGyroValue(gyroValues);
                     break;
                 case Sensor.TYPE_ACCELEROMETER :
                     accValues = event.values.clone();
+                    filterAccValues(accValues);
                     break;
             }
         }
@@ -183,6 +185,21 @@ public class ShowMapActivityFragment extends Fragment {
         return pDouble;
     }
 
+    //过滤
+    public void filterGyroValue(float[] gyroValues){
+        for(int i = 0; i < gyroValues.length; i++){
+            gyroValues[i] = (Math.abs(gyroValues[i]) > 0.01) ? gyroValues[i]: 0;  //如果陀螺仪的值小于0.01则认为直接为0
+        }
+    }
+
+
+    //// TODO: 2017/4/16 干！
+    public void filterAccValues(float[] accValues){
+        for(int i = 0; i < accValues.length; i++) {
+            accValueList.get(i).add(accValues[i]);
+        }
+    }
+
 
     public BroadcastReceiver mReceiver = new BroadcastReceiver() {
         String dFinished = BluetoothAdapter.ACTION_DISCOVERY_FINISHED;
@@ -216,7 +233,7 @@ public class ShowMapActivityFragment extends Fragment {
     //                            location = getMassCenterLocation(listSortedNode, bleNodeLoc);   //通过质心定位得到位置
     //                            String need = location[0].toString() + "," +location[1].toString();
                                 String need = listSortedNode.get(0).split(":")[5];
-                                mtext.setText(need);
+//                                mtext.setText(need);
                                 webView.loadUrl(setInsetJS(location[0] + "", location[1] + ""));
 
                                 Thread thread = new Thread(new Runnable() {
