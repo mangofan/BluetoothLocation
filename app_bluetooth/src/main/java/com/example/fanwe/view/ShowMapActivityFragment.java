@@ -262,6 +262,7 @@ public class ShowMapActivityFragment extends Fragment implements Cloneable {
             ArrayList<Float> valueList = new ArrayList<>();
 //            valueList = (ArrayList<Float>) accValueList.get(i).clone();
             valueList = accValueList.get(i);
+            System.out.print("qwe");
             valueList.add(0, accValues[i]);
             if (valueList.size() > 15) {
                 valueList.remove(10);   //维持长度小于10
