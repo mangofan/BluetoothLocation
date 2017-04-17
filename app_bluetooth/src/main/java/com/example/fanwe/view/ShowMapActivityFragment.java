@@ -260,6 +260,7 @@ public class ShowMapActivityFragment extends Fragment implements Cloneable {
         for (int i = 0; i < accValues.length; i++) {
             //将得到的加速度值存储起来
             ArrayList<Float> valueList = new ArrayList<>();
+//            valueList = (ArrayList<Float>) accValueList.get(i).clone();
             valueList = accValueList.get(i);
             valueList.add(0, accValues[i]);
             if (valueList.size() > 15) {
