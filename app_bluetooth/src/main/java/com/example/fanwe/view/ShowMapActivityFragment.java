@@ -155,7 +155,6 @@ public class ShowMapActivityFragment extends Fragment implements Cloneable {
                     break;
             }
         }
-
         @Override
         public void onAccuracyChanged(Sensor sensor, int accuracy) {
         }
@@ -260,14 +259,11 @@ public class ShowMapActivityFragment extends Fragment implements Cloneable {
         for (int i = 0; i < accValues.length; i++) {
             //将得到的加速度值存储起来
             ArrayList<Float> valueList = new ArrayList<>();
-//            valueList = (ArrayList<Float>) accValueList.get(i).clone();
             valueList = accValueList.get(i);
-            System.out.print("qwe");
             valueList.add(0, accValues[i]);
             if (valueList.size() > 15) {
                 valueList.remove(10);   //维持长度小于10
             }
-            accValueList.put(i, valueList);
 
             ArrayList<Float> percentileList = accValueList.get(i + 3);
             valueList = cutList(valueList, ACC_LIMIT);
@@ -425,14 +421,11 @@ public class ShowMapActivityFragment extends Fragment implements Cloneable {
     }
 
     private void initAccFilterSparseArray() {
-        ArrayList<Float> list = new ArrayList<>();
-        list.add(0f);
-        accValueList.put(0, list);
-        accValueList.put(1, list);
-        accValueList.put(2, list);
-        accValueList.put(3, list);
-        accValueList.put(4, list);
-        accValueList.put(5, list);
+        for(int i = 0; i < 6; i++){
+            ArrayList<Float> list = new ArrayList<>();
+            list.add(0f);
+            accValueList.put(i, list);
+        }
     }
 
     private ArrayList cutList(List list, int limit) {
