@@ -56,8 +56,8 @@ public class ShowMapActivityFragment extends Fragment implements Cloneable {
     WebView webView;
     TextView mTextAcc;
     TextView mTextGyro;
-    int RSSI_LIMIT = 8, BLE_CHOOSED_NUM = 3, ACC_LIMIT = 10;
-    float PERCENTILE_LIMIT = 0.1f;
+    int RSSI_LIMIT = 3, BLE_CHOOSED_NUM = 3, ACC_LIMIT = 10;
+    float PERCENTILE_LIMIT = 0.5f;
 
     //蓝牙有关的参数
     Double[] location = new Double[2];
@@ -69,69 +69,9 @@ public class ShowMapActivityFragment extends Fragment implements Cloneable {
     Map<String, Double[]> bleNodeLoc = new HashMap<>(); //固定节点的位置Map
     BluetoothAdapter bluetoothAdapter = BluetoothAdapter.getDefaultAdapter();
 
-    //蓝牙广播监听器
-    public BroadcastReceiver mReceiver = new BroadcastReceiver() {
-        String dFinished = BluetoothAdapter.ACTION_DISCOVERY_FINISHED;
 
-        @Override
-        public void onReceive(Context context, Intent intent) {
 
-            BluetoothDevice remoteDevice = intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE);
-            String remoteMAC;
-            final Short rssi;
-            if (remoteDevice != null) {
-                remoteMAC = remoteDevice.getAddress();
-                if (bleNodeLoc.containsKey(remoteMAC)) {
-                    rssi = intent.getExtras().getShort(BluetoothDevice.EXTRA_RSSI);
-                    if (!dFinished.equals(intent.getAction())) {
-                        if (mAllRssi.containsKey(remoteMAC)) {
-                            List<Double> list1 = mAllRssi.get(remoteMAC);
-                            list1.add(0, (double) rssi);
-                            mAllRssi.put(remoteMAC, list1);
-                        } else {
-                            ArrayList<Double> list = new ArrayList<>();
-                            list.add((double) rssi);   //如果这个MAC地址没有出现过，建立list存储历次rssi
-                            mAllRssi.put(remoteMAC, list);
-                        }
-                        final List<Double> rssiValueFilterd = LogarNormalDistribution(mAllRssi.get(remoteMAC));  //获取滤波后的信号强度表
-                        mTest.put(remoteMAC, rssiValueFilterd);
-                        mRssiFilterd.put(remoteMAC, getAvg(rssiValueFilterd));   //更新MAC地址对应信号强度的map
-                        if (mRssiFilterd.size() > 2) {
-                            listSortedNode = getSort(mRssiFilterd, BLE_CHOOSED_NUM);     //得到按距离排序的蓝牙节点的列表
-                            location = getNearestNode(listSortedNode, bleNodeLoc);   //定位为最近的节点的位置。
-                            //                            location = getMassCenterLocation(listSortedNode, bleNodeLoc);   //通过质心定位得到位置
-                            //                            String need = location[0].toString() + "," +location[1].toString();
-                            String need = listSortedNode.get(0).split(":")[5];
-//                                mtext.setText(need);
-                            webView.loadUrl(setInsetJS(location[0] + "", location[1] + ""));
 
-                            Thread thread = new Thread(new Runnable() {
-                                @Override
-                                public void run() {
-                                    try {
-                                        Calendar now = Calendar.getInstance();
-                                        Integer minute = now.get(Calendar.MINUTE);
-                                        Integer second = now.get(Calendar.SECOND);
-                                        Map<String, List<Double>> mapForStore = getMapForStore(listSortedNode, mAllRssi);
-                                        Map<String, List<Double>> mapForStore1 = getMapForStore(listSortedNode, mTest);
-                                        String need1 = "{" + location[0].toString() + "   " + location[1].toString() + "     "
-                                                + minute.toString() + ":" + second.toString() + "\n"
-                                                + mapForStore + "\n"
-                                                + mapForStore1 + "\n" + "}";
-                                        FileCache.saveFile(need1);
-                                    } catch (Exception e) {
-                                        e.printStackTrace();
-
-                                    }
-                                }
-                            });
-                            thread.start();
-                        }
-                    }
-                }
-            }
-        }
-    };
 
     //传感器有关的参数
     Integer TIME0 = 200;
@@ -282,6 +222,70 @@ public class ShowMapActivityFragment extends Fragment implements Cloneable {
         return q_1;
     }
 
+
+    //蓝牙广播监听器
+    public BroadcastReceiver mReceiver = new BroadcastReceiver() {
+        String dFinished = BluetoothAdapter.ACTION_DISCOVERY_FINISHED;
+
+        @Override
+        public void onReceive(Context context, Intent intent) {
+
+            BluetoothDevice remoteDevice = intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE);
+            String remoteMAC;
+            final Short rssi;
+            if (remoteDevice != null) {
+                remoteMAC = remoteDevice.getAddress();
+                if (bleNodeLoc.containsKey(remoteMAC)) {
+                    rssi = intent.getExtras().getShort(BluetoothDevice.EXTRA_RSSI);
+                    if (!dFinished.equals(intent.getAction())) {
+                        if (mAllRssi.containsKey(remoteMAC)) {
+                            List<Double> list1 = mAllRssi.get(remoteMAC);
+                            list1.add(0, (double) rssi);
+                            mAllRssi.put(remoteMAC, list1);
+                        } else {
+                            ArrayList<Double> list = new ArrayList<>();
+                            list.add((double) rssi);   //如果这个MAC地址没有出现过，建立list存储历次rssi
+                            mAllRssi.put(remoteMAC, list);
+                        }
+                        final List<Double> rssiValueFilterd = LogarNormalDistribution(mAllRssi.get(remoteMAC));  //获取滤波后的信号强度表
+                        mTest.put(remoteMAC, rssiValueFilterd);
+                        mRssiFilterd.put(remoteMAC, getAvg(rssiValueFilterd));   //更新MAC地址对应信号强度的map
+                        if (mRssiFilterd.size() > 2) {
+                            listSortedNode = getSort(mRssiFilterd, BLE_CHOOSED_NUM);     //得到按距离排序的蓝牙节点的列表
+                            location = getNearestNode(listSortedNode, bleNodeLoc);   //定位为最近的节点的位置。
+                            //                            location = getMassCenterLocation(listSortedNode, bleNodeLoc);   //通过质心定位得到位置
+                            //                            String need = location[0].toString() + "," +location[1].toString();
+                            String need = listSortedNode.get(0).split(":")[5];
+//                                mtext.setText(need);
+                            webView.loadUrl(setInsetJS(location[0] + "", location[1] + ""));
+
+                            Thread thread = new Thread(new Runnable() {
+                                @Override
+                                public void run() {
+                                    try {
+                                        Calendar now = Calendar.getInstance();
+                                        Integer minute = now.get(Calendar.MINUTE);
+                                        Integer second = now.get(Calendar.SECOND);
+                                        Map<String, List<Double>> mapForStore = getMapForStore(listSortedNode, mAllRssi);
+                                        Map<String, List<Double>> mapForStore1 = getMapForStore(listSortedNode, mTest);
+                                        String need1 = "{" + location[0].toString() + "   " + location[1].toString() + "     "
+                                                + minute.toString() + ":" + second.toString() + "\n"
+                                                + mapForStore + "\n"
+                                                + mapForStore1 + "\n" + "}";
+                                        FileCache.saveFile(need1);
+                                    } catch (Exception e) {
+                                        e.printStackTrace();
+
+                                    }
+                                }
+                            });
+                            thread.start();
+                        }
+                    }
+                }
+            }
+        }
+    };
 
     //对数正态滤波
     private List<Double> LogarNormalDistribution(List<Double> mAllRssilist) {
