@@ -67,6 +67,9 @@ public class ShowMapActivityFragment extends Fragment implements Cloneable {
     List<String> listSortedNode = new ArrayList<>();
     StringBuffer stringBuffer = new StringBuffer();
     Map<String, Double[]> bleNodeLoc = new HashMap<>(); //固定节点的位置Map
+    BluetoothAdapter bluetoothAdapter = BluetoothAdapter.getDefaultAdapter();
+
+    //蓝牙广播监听器
     public BroadcastReceiver mReceiver = new BroadcastReceiver() {
         String dFinished = BluetoothAdapter.ACTION_DISCOVERY_FINISHED;
 
@@ -129,7 +132,6 @@ public class ShowMapActivityFragment extends Fragment implements Cloneable {
             }
         }
     };
-    BluetoothAdapter bluetoothAdapter = BluetoothAdapter.getDefaultAdapter();
 
     //传感器有关的参数
     Integer TIME0 = 200;
@@ -159,10 +161,6 @@ public class ShowMapActivityFragment extends Fragment implements Cloneable {
         public void onAccuracyChanged(Sensor sensor, int accuracy) {
         }
     };
-
-    public ShowMapActivityFragment() {
-
-    }
 
     @Override
     public View onCreateView(LayoutInflater inflater, ViewGroup container,
@@ -201,40 +199,10 @@ public class ShowMapActivityFragment extends Fragment implements Cloneable {
                 mTextAcc.setText(acc);
                 String gyro = String.valueOf(gyroValues[0]) + '\n' + String.valueOf(gyroValues[1]) + '\n' + String.valueOf(gyroValues[2]);
                 mTextGyro.setText(gyro);
-
             }
         });
     }
 
-    //加速度矢量补全为四元数
-    public float[] getAccCompleted(float[] acc) {
-        float[] accCompleted = new float[4];
-        accCompleted[0] = 0.0f;
-        accCompleted[1] = acc[0];
-        accCompleted[2] = acc[1];
-        accCompleted[3] = acc[2];
-        return accCompleted;
-    }
-
-    //四元数乘法
-    public float[] getQuaternionMulit(float[] Q1, float[] Q2) {
-        float[] Q3 = new float[4];
-        Q3[0] = Q1[0] * Q2[0] - Q1[1] * Q2[1] - Q1[2] * Q2[2] - Q1[3] * Q2[3];
-        Q3[1] = Q1[0] * Q2[1] + Q1[1] * Q2[0] + Q1[2] * Q2[3] - Q1[3] * Q2[2];
-        Q3[2] = Q1[0] * Q2[2] + Q1[2] * Q2[0] + Q1[3] * Q2[1] - Q1[1] * Q2[3];
-        Q3[3] = Q1[0] * Q2[3] + Q1[3] * Q2[0] + Q1[1] * Q2[2] - Q1[2] * Q2[1];
-        return Q3;
-    }
-
-    //四元数取逆
-    public float[] getQuaternionInverse(float[] q) {
-        float[] q_1 = new float[4];
-        q_1[0] = q[0];
-        q_1[1] = -q[1];
-        q_1[2] = -q[2];
-        q_1[3] = -q[3];
-        return q_1;
-    }
 
     //根据四元数转换方式，将加速度矢量转换到地理坐标系
     public Double[] getConvertAcc(float[] p_1, float[] q) {
@@ -246,14 +214,12 @@ public class ShowMapActivityFragment extends Fragment implements Cloneable {
         pDouble[2] = Double.valueOf(String.valueOf(p[3]));
         return pDouble;
     }
-
     //过滤陀螺仪数据
     public void filterGyroValue(float[] gyroValues) {
         for (int i = 0; i < gyroValues.length; i++) {
             gyroValues[i] = (Math.abs(gyroValues[i]) > 0.01) ? gyroValues[i] : 0;  //如果陀螺仪的值小于0.01则认为直接为0
         }
     }
-
     //加速计去除零漂,认为匀加速运动比较少，将匀加速和静止不动合并起来，都去掉
     public void filterAccValues(float[] accValues) {
         for (int i = 0; i < accValues.length; i++) {
@@ -264,7 +230,6 @@ public class ShowMapActivityFragment extends Fragment implements Cloneable {
             if (valueList.size() > 15) {
                 valueList.remove(10);   //维持长度小于10
             }
-
             ArrayList<Float> percentileList = accValueList.get(i + 3);
             valueList = cutList(valueList, ACC_LIMIT);
             float percentile = Math.abs((valueList.get(1) - valueList.get(0)) / valueList.get(0));
@@ -278,6 +243,45 @@ public class ShowMapActivityFragment extends Fragment implements Cloneable {
             }
         }
     }
+
+
+    //切割子list
+    private ArrayList cutList(List list, int limit) {
+        int trueLimit = limit < list.size() ? limit : list.size();
+        ArrayList returnList = new ArrayList();
+        for (int i = 0; i < trueLimit; i++) {
+            returnList.add(list.get(i));
+        }
+        return returnList;
+    }
+    //加速度矢量补全为四元数
+    public float[] getAccCompleted(float[] acc) {
+        float[] accCompleted = new float[4];
+        accCompleted[0] = 0.0f;
+        accCompleted[1] = acc[0];
+        accCompleted[2] = acc[1];
+        accCompleted[3] = acc[2];
+        return accCompleted;
+    }
+    //四元数乘法
+    public float[] getQuaternionMulit(float[] Q1, float[] Q2) {
+        float[] Q3 = new float[4];
+        Q3[0] = Q1[0] * Q2[0] - Q1[1] * Q2[1] - Q1[2] * Q2[2] - Q1[3] * Q2[3];
+        Q3[1] = Q1[0] * Q2[1] + Q1[1] * Q2[0] + Q1[2] * Q2[3] - Q1[3] * Q2[2];
+        Q3[2] = Q1[0] * Q2[2] + Q1[2] * Q2[0] + Q1[3] * Q2[1] - Q1[1] * Q2[3];
+        Q3[3] = Q1[0] * Q2[3] + Q1[3] * Q2[0] + Q1[1] * Q2[2] - Q1[2] * Q2[1];
+        return Q3;
+    }
+    //四元数取逆
+    public float[] getQuaternionInverse(float[] q) {
+        float[] q_1 = new float[4];
+        q_1[0] = q[0];
+        q_1[1] = -q[1];
+        q_1[2] = -q[2];
+        q_1[3] = -q[3];
+        return q_1;
+    }
+
 
     //对数正态滤波
     private List<Double> LogarNormalDistribution(List<Double> mAllRssilist) {
@@ -310,6 +314,27 @@ public class ShowMapActivityFragment extends Fragment implements Cloneable {
 //        }
 
         return value;
+    }
+
+    //根据RSSI强度，得到最近的蓝牙节点
+    public Double[] getNearestNode(List<String> listSortedNode, Map<String, Double[]> bleNodeLoc) {
+        Double[] location = new Double[2];
+        String A = listSortedNode.get(0);
+        location[0] = bleNodeLoc.get(A)[0];
+        location[1] = bleNodeLoc.get(A)[1];
+        return location;
+    }
+
+    //使用质心定位得到坐标
+    public Double[] getMassCenterLocation(ArrayList<String> listSortedNode, Map<String, Double[]> bleNodeLoc) {
+        Double[] location = new Double[2];
+        String A = listSortedNode.get(0), B = listSortedNode.get(1), C = listSortedNode.get(2);
+        Double Ax = bleNodeLoc.get(A)[0], Ay = bleNodeLoc.get(A)[1], Bx = bleNodeLoc.get(B)[0], By = bleNodeLoc.get(B)[1], Cx = bleNodeLoc.get(C)[0], Cy = bleNodeLoc.get(C)[1];
+        location[0] = 1.0 / 3 * ((Ax) + 0.5 * (Ax + Bx) + 0.5 * (Bx + Cx));
+        location[1] = 1.0 / 3 * ((Ay) + 0.5 * (Ay + By) + 0.5 * (By + Cy));
+        Log.d("listSortedNode", listSortedNode.toString());
+        Log.d("location", Arrays.toString(location));
+        return location;
     }
 
     //求ArrayLIst均值
@@ -369,27 +394,6 @@ public class ShowMapActivityFragment extends Fragment implements Cloneable {
         return list;     //排序好的MAC地址的列表
     }
 
-    //根据RSSI强度，得到最近的蓝牙节点
-    public Double[] getNearestNode(List<String> listSortedNode, Map<String, Double[]> bleNodeLoc) {
-        Double[] location = new Double[2];
-        String A = listSortedNode.get(0);
-        location[0] = bleNodeLoc.get(A)[0];
-        location[1] = bleNodeLoc.get(A)[1];
-        return location;
-    }
-
-    //使用质心定位得到坐标
-    public Double[] getMassCenterLocation(ArrayList<String> listSortedNode, Map<String, Double[]> bleNodeLoc) {
-        Double[] location = new Double[2];
-        String A = listSortedNode.get(0), B = listSortedNode.get(1), C = listSortedNode.get(2);
-        Double Ax = bleNodeLoc.get(A)[0], Ay = bleNodeLoc.get(A)[1], Bx = bleNodeLoc.get(B)[0], By = bleNodeLoc.get(B)[1], Cx = bleNodeLoc.get(C)[0], Cy = bleNodeLoc.get(C)[1];
-        location[0] = 1.0 / 3 * ((Ax) + 0.5 * (Ax + Bx) + 0.5 * (Bx + Cx));
-        location[1] = 1.0 / 3 * ((Ay) + 0.5 * (Ay + By) + 0.5 * (By + Cy));
-        Log.d("listSortedNode", listSortedNode.toString());
-        Log.d("location", Arrays.toString(location));
-        return location;
-    }
-
     //从MAP中选出 list中元素作为键，对应的键值对
     public synchronized Map<String, List<Double>> getMapForStore(List<String> listSortedNode, Map<String, List<Double>> map) {
         Map<String, List<Double>> mapReturn = new HashMap<>();
@@ -401,6 +405,14 @@ public class ShowMapActivityFragment extends Fragment implements Cloneable {
         return mapReturn;
     }
 
+    //提示用户开启手机蓝牙
+    private void initBluetooth() {
+        if (!bluetoothAdapter.isEnabled()) {
+            //蓝牙未打开，提醒用户打开
+            Intent intent = new Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE);
+            startActivityForResult(intent, ENABLE_BLUETOOTH);
+        }
+    }
     //初始化需要加同步锁的变量
     private void initSynchronize() {
         mAllRssi = Collections.synchronizedMap(mAllRssi);
@@ -408,7 +420,6 @@ public class ShowMapActivityFragment extends Fragment implements Cloneable {
         listSortedNode = Collections.synchronizedList(listSortedNode);
         mTest = Collections.synchronizedMap(mTest);
     }
-
     //和sensor有关的初始化
     private void initSensor() {
         SensorManager sensorManager = (SensorManager) getActivity().getSystemService(Context.SENSOR_SERVICE);
@@ -419,7 +430,7 @@ public class ShowMapActivityFragment extends Fragment implements Cloneable {
         sensorManager.registerListener(listener, accSensor, SensorManager.SENSOR_DELAY_GAME);
         sensorManager.registerListener(listener, gyroSensor, SensorManager.SENSOR_DELAY_GAME);
     }
-
+    //对加速计过滤时用到的sparsearray的初始化
     private void initAccFilterSparseArray() {
         for(int i = 0; i < 6; i++){
             ArrayList<Float> list = new ArrayList<>();
@@ -427,15 +438,29 @@ public class ShowMapActivityFragment extends Fragment implements Cloneable {
             accValueList.put(i, list);
         }
     }
+    private void initWebview() {
+        WebSettings settings = webView.getSettings();
+        settings.setJavaScriptEnabled(true);
 
-    private ArrayList cutList(List list, int limit) {
-        int trueLimit = limit < list.size() ? limit : list.size();
-        ArrayList returnList = new ArrayList();
-        for (int i = 0; i < trueLimit; i++) {
-            returnList.add(list.get(i));
-        }
-        return returnList;
+        settings.setLoadWithOverviewMode(true);
+        settings.setUseWideViewPort(true);
+        //设置字符编码
+        settings.setDefaultTextEncodingName("utf-8");
+        // 支持缩放
+        settings.setSupportZoom(true);
+        // //启用内置缩放装置
+        settings.setBuiltInZoomControls(true);
+        // 支持自动加载图片
+        settings.setLoadsImagesAutomatically(true);
+        // 支持内容重新布局
+        settings.setLayoutAlgorithm(WebSettings.LayoutAlgorithm.SINGLE_COLUMN);
+//        webView.addJavascriptInterface(new CommodityData(getApplicationContext(), serializableMap, "ProductManageDetail"), "ProductManage");
+        // webView.loadUrl("file:///android_asset/svg/10072_1.svg");
+        webView.setBackgroundColor(Color.TRANSPARENT);
+        webView.loadUrl("file:///android_asset/svg/10072_1.html");
     }
+
+
 
     //初始化已知蓝牙节点信息
     void initlocation() {
@@ -485,15 +510,6 @@ public class ShowMapActivityFragment extends Fragment implements Cloneable {
 
     }
 
-    //提示用户开启手机蓝牙
-    private void initBluetooth() {
-        if (!bluetoothAdapter.isEnabled()) {
-            //蓝牙未打开，提醒用户打开
-            Intent intent = new Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE);
-            startActivityForResult(intent, ENABLE_BLUETOOTH);
-        }
-    }
-
     @Subscribe(threadMode = ThreadMode.MAIN)
     public void startDiscovery(String startloaction) {
         getActivity().registerReceiver(mReceiver, new IntentFilter((BluetoothDevice.ACTION_FOUND)));
@@ -517,25 +533,9 @@ public class ShowMapActivityFragment extends Fragment implements Cloneable {
                 "}";
     }
 
-    private void initWebview() {
-        WebSettings settings = webView.getSettings();
-        settings.setJavaScriptEnabled(true);
+    public ShowMapActivityFragment() {
 
-        settings.setLoadWithOverviewMode(true);
-        settings.setUseWideViewPort(true);
-        //设置字符编码
-        settings.setDefaultTextEncodingName("utf-8");
-        // 支持缩放
-        settings.setSupportZoom(true);
-        // //启用内置缩放装置
-        settings.setBuiltInZoomControls(true);
-        // 支持自动加载图片
-        settings.setLoadsImagesAutomatically(true);
-        // 支持内容重新布局
-        settings.setLayoutAlgorithm(WebSettings.LayoutAlgorithm.SINGLE_COLUMN);
-//        webView.addJavascriptInterface(new CommodityData(getApplicationContext(), serializableMap, "ProductManageDetail"), "ProductManage");
-        // webView.loadUrl("file:///android_asset/svg/10072_1.svg");
-        webView.setBackgroundColor(Color.TRANSPARENT);
-        webView.loadUrl("file:///android_asset/svg/10072_1.html");
     }
+
+
 }
