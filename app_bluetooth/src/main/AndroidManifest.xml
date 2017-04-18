@@ -32,6 +32,11 @@
             </intent-filter>
 
         </activity>
+        <service android:name="com.example.fanwe.services.SensorService"
+            android:enabled="true"
+            android:permission="">
+
+        </service>
     </application>
 
 </manifest>
