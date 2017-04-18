@@ -29,6 +29,7 @@ import org.greenrobot.eventbus.EventBus;
 import org.greenrobot.eventbus.Subscribe;
 import org.greenrobot.eventbus.ThreadMode;
 
+import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Calendar;
@@ -36,6 +37,7 @@ import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Timer;
 import java.util.TimerTask;
@@ -61,7 +63,7 @@ public class ShowMapActivityFragment extends Fragment implements Cloneable {
     WebView webView;
     TextView mTextAcc;
     TextView mTextGyro;
-    int RSSI_LIMIT = 3, BLE_CHOOSED_NUM = 3, ACC_LIMIT = 10;
+    int RSSI_LIMIT = 5, BLE_CHOOSED_NUM = 3;
     float PERCENTILE_LIMIT = 0.5f;
 
     //蓝牙有关的参数
@@ -80,7 +82,9 @@ public class ShowMapActivityFragment extends Fragment implements Cloneable {
 
 
     //传感器有关的参数
-    Integer TIME0 = 200;
+    int ACC_LIMIT = 10, TIME0 = 200;
+    long[] timeArray = new long[2];
+    Double Sx = 0.0, Sy = 0.0, V0x = 0.0, V0y = 0.0, ax = 0.0, ay = 0.0;
     float[] rotVecValues = {0, 0, 0, 0}, accValues = {0, 0, 0}, gyroValues = {0, 0, 0};
     SparseArray<ArrayList<Float>> accValueList = new SparseArray<>();   //维持一定时间内的加速计历次读数的列表
 
@@ -266,9 +270,13 @@ public class ShowMapActivityFragment extends Fragment implements Cloneable {
                             locationList.add(0, location);
                             Log.d("hahaha", need1);
                             String need = listSortedNode.get(0).split(":")[5];
-//                                mtext.setText(need);
+//                            SimpleDateFormat df = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault());
+//                            df.format(System.currentTimeMillis());
+                            long time = System.currentTimeMillis() - timeLastCall;
+
+
                             if(getSensorConfirm(locationList) == 1){
-                                webView.loadUrl(setInsetJS(location[0] + "", location[1] + ""));
+//                                webView.loadUrl(setInsetJS(location[0] + "", location[1] + ""));
                             }
 
 
@@ -295,6 +303,9 @@ public class ShowMapActivityFragment extends Fragment implements Cloneable {
 //                            });
 //                            thread.start();
                         }
+                        else {
+                            timeArray[1] = System.currentTimeMillis();
+                        }
                     }
                 }
             }
@@ -303,12 +314,19 @@ public class ShowMapActivityFragment extends Fragment implements Cloneable {
 
     private int getSensorConfirm(ArrayList<Double[]> locationList){
         if(locationList.get(0) != locationList.get(1)){
+            timeArray[0] = System.currentTimeMillis();
+            long timeDifference = timeArray[0] - timeArray[1];
+            timeArray[1] = timeArray[0];
             float[] pQuaternion = new float[4];
             SensorManager.getQuaternionFromVector(pQuaternion, rotVecValues);  //由旋转矢量获得四元数
             Double[] accConverted = getConvertAcc(getAccCompleted(accValues), pQuaternion);  //将加速度矢量转换到地理坐标系
-
+            ax = accConverted[0];
+            ay = accConverted[1];
+            Sx += V0x * timeDifference + 0.5 * ax * timeDifference * timeDifference;
+            Sy += V0y * timeDifference + 0.5 * ay * timeDifference * timeDifference;
+            V0x = V0x + ax * timeDifference;
+            V0y = V0y + ay * timeDifference;
         }
-
         return 1;
     }
 
@@ -340,8 +358,7 @@ public class ShowMapActivityFragment extends Fragment implements Cloneable {
 
 //        if(value.size() != 0) {
 //            avg = getAvg(value);               //重新获取RSSI的平均值
-//        }
-
+//
         return value;
     }
 
