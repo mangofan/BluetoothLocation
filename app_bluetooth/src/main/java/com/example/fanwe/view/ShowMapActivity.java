@@ -12,7 +12,7 @@ import com.example.fanwe.bluetoothlocation.R;
 import org.greenrobot.eventbus.EventBus;
 
 public class ShowMapActivity extends AppCompatActivity {
-    boolean isstop_location=false;
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -24,15 +24,11 @@ public class ShowMapActivity extends AppCompatActivity {
         fab.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View view) {
-                if(isstop_location){
-                    EventBus.getDefault().post(new Stop());
-                    Snackbar.make(view, "正在取消定位....", Snackbar.LENGTH_LONG)
-                            .setAction("Action", null).show();
-                }else {
-                    EventBus.getDefault().post("定位");
+
+                    EventBus.getDefault().post("start");
                     Snackbar.make(view, "正在定位中....", Snackbar.LENGTH_LONG)
                             .setAction("Action", null).show();
-                }
+
             }
         });
     }

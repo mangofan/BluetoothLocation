@@ -39,6 +39,11 @@ import java.util.List;
 import java.util.Map;
 import java.util.Timer;
 import java.util.TimerTask;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.TimeUnit;
 
 import utils.FileCache;
 
@@ -68,6 +73,7 @@ public class ShowMapActivityFragment extends Fragment implements Cloneable {
     StringBuffer stringBuffer = new StringBuffer();
     Map<String, Double[]> bleNodeLoc = new HashMap<>(); //固定节点的位置Map
     BluetoothAdapter bluetoothAdapter = BluetoothAdapter.getDefaultAdapter();
+    ArrayList<Double[]> locationList = new ArrayList<>();
 
 
 
@@ -101,6 +107,7 @@ public class ShowMapActivityFragment extends Fragment implements Cloneable {
         public void onAccuracyChanged(Sensor sensor, int accuracy) {
         }
     };
+
 
     @Override
     public View onCreateView(LayoutInflater inflater, ViewGroup container,
@@ -139,6 +146,7 @@ public class ShowMapActivityFragment extends Fragment implements Cloneable {
                 mTextAcc.setText(acc);
                 String gyro = String.valueOf(gyroValues[0]) + '\n' + String.valueOf(gyroValues[1]) + '\n' + String.valueOf(gyroValues[2]);
                 mTextGyro.setText(gyro);
+
             }
         });
     }
@@ -175,7 +183,6 @@ public class ShowMapActivityFragment extends Fragment implements Cloneable {
             float percentile = Math.abs((valueList.get(1) - valueList.get(0)) / valueList.get(0));
             if (percentile > PERCENTILE_LIMIT) {   //当变化比例超过0.1时，认为是真实的变化。
                 percentileList.add(0, percentile);
-                Log.d("hahha","hahahah");
             }
             else {
                 percentileList.add(0, 0.0f);
@@ -229,6 +236,7 @@ public class ShowMapActivityFragment extends Fragment implements Cloneable {
 
         @Override
         public void onReceive(Context context, Intent intent) {
+            Log.d("hahahah","hhahahaha");
 
             BluetoothDevice remoteDevice = intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE);
             String remoteMAC;
@@ -254,38 +262,55 @@ public class ShowMapActivityFragment extends Fragment implements Cloneable {
                             listSortedNode = getSort(mRssiFilterd, BLE_CHOOSED_NUM);     //得到按距离排序的蓝牙节点的列表
                             location = getNearestNode(listSortedNode, bleNodeLoc);   //定位为最近的节点的位置。
                             //                            location = getMassCenterLocation(listSortedNode, bleNodeLoc);   //通过质心定位得到位置
-                            //                            String need = location[0].toString() + "," +location[1].toString();
+                            String need1 = location[0].toString() + "," +location[1].toString();
+                            locationList.add(0, location);
+                            Log.d("hahaha", need1);
                             String need = listSortedNode.get(0).split(":")[5];
 //                                mtext.setText(need);
-                            webView.loadUrl(setInsetJS(location[0] + "", location[1] + ""));
+                            if(getSensorConfirm(locationList) == 1){
+                                webView.loadUrl(setInsetJS(location[0] + "", location[1] + ""));
+                            }
 
-                            Thread thread = new Thread(new Runnable() {
-                                @Override
-                                public void run() {
-                                    try {
-                                        Calendar now = Calendar.getInstance();
-                                        Integer minute = now.get(Calendar.MINUTE);
-                                        Integer second = now.get(Calendar.SECOND);
-                                        Map<String, List<Double>> mapForStore = getMapForStore(listSortedNode, mAllRssi);
-                                        Map<String, List<Double>> mapForStore1 = getMapForStore(listSortedNode, mTest);
-                                        String need1 = "{" + location[0].toString() + "   " + location[1].toString() + "     "
-                                                + minute.toString() + ":" + second.toString() + "\n"
-                                                + mapForStore + "\n"
-                                                + mapForStore1 + "\n" + "}";
-                                        FileCache.saveFile(need1);
-                                    } catch (Exception e) {
-                                        e.printStackTrace();
 
-                                    }
-                                }
-                            });
-                            thread.start();
+//                            Thread thread = new Thread(
+//                                    new Runnable() {
+//                                @Override
+//                                public void run() {
+//                                    try {
+//                                        Calendar now = Calendar.getInstance();
+//                                        Integer minute = now.get(Calendar.MINUTE);
+//                                        Integer second = now.get(Calendar.SECOND);
+//                                        Map<String, List<Double>> mapForStore = getMapForStore(listSortedNode, mAllRssi);
+//                                        Map<String, List<Double>> mapForStore1 = getMapForStore(listSortedNode, mTest);
+//                                        String need1 = "{" + location[0].toString() + "   " + location[1].toString() + "     "
+//                                                + minute.toString() + ":" + second.toString() + "\n"
+//                                                + mapForStore + "\n"
+//                                                + mapForStore1 + "\n" + "}";
+//                                        FileCache.saveFile(need1);
+//                                    } catch (Exception e) {
+//                                        e.printStackTrace();
+//
+//                                    }
+//                                }
+//                            });
+//                            thread.start();
                         }
                     }
                 }
             }
         }
     };
+
+    private int getSensorConfirm(ArrayList<Double[]> locationList){
+        if(locationList.get(0) != locationList.get(1)){
+            float[] pQuaternion = new float[4];
+            SensorManager.getQuaternionFromVector(pQuaternion, rotVecValues);  //由旋转矢量获得四元数
+            Double[] accConverted = getConvertAcc(getAccCompleted(accValues), pQuaternion);  //将加速度矢量转换到地理坐标系
+
+        }
+
+        return 1;
+    }
 
     //对数正态滤波
     private List<Double> LogarNormalDistribution(List<Double> mAllRssilist) {
@@ -512,21 +537,35 @@ public class ShowMapActivityFragment extends Fragment implements Cloneable {
 
         EventBus.getDefault().unregister(this);
 
-    }
+        cancelTask();
 
+    }
+    ScheduledFuture<?> future;
     @Subscribe(threadMode = ThreadMode.MAIN)
-    public void startDiscovery(String startloaction) {
+    public void startDiscovery(String controlStartDiscovery) {
         getActivity().registerReceiver(mReceiver, new IntentFilter((BluetoothDevice.ACTION_FOUND)));
-        if (bluetoothAdapter.isEnabled() && !bluetoothAdapter.isDiscovering())
-            bluetoothAdapter.startDiscovery();
+       if (bluetoothAdapter.isEnabled() && !bluetoothAdapter.isDiscovering()) {
+                bluetoothAdapter.startDiscovery();
+        }
         getActivity().registerReceiver(mReceiver, new IntentFilter(BluetoothAdapter.ACTION_DISCOVERY_FINISHED));
+
+        cancelTask();
+        ScheduledExecutorService executorService = Executors.newSingleThreadScheduledExecutor();
+       future = executorService.scheduleAtFixedRate(new Runnable() {
+            @Override
+            public void run() {
+                bluetoothAdapter.startDiscovery();
+            }
+        }, 5, 5, TimeUnit.SECONDS);
     }
 
-    @Subscribe(threadMode = ThreadMode.MAIN)
-    public void stopDiscovery(Stop stop) {
-        getActivity().unregisterReceiver(mReceiver);
+    public void cancelTask(){
+       if(future!=null) {
+           future.cancel(false);
+           future = null;
+       }
 
-    }
+   }
 
     private String setInsetJS(String rx, String ry) {
         return "javascript:{" +
