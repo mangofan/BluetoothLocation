@@ -11,8 +11,10 @@ import android.hardware.Sensor;
 import android.hardware.SensorEvent;
 import android.hardware.SensorEventListener;
 import android.hardware.SensorManager;
+import android.location.Location;
 import android.os.Bundle;
 import android.support.v4.app.Fragment;
+import android.support.v4.util.LongSparseArray;
 import android.util.Log;
 import android.util.SparseArray;
 import android.view.LayoutInflater;
@@ -29,6 +31,7 @@ import org.greenrobot.eventbus.EventBus;
 import org.greenrobot.eventbus.Subscribe;
 import org.greenrobot.eventbus.ThreadMode;
 
+import java.lang.reflect.Array;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -39,6 +42,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.SortedMap;
 import java.util.Timer;
 import java.util.TimerTask;
 import java.util.concurrent.ExecutorService;
@@ -51,6 +55,7 @@ import utils.FileCache;
 
 import static com.example.fanwe.bluetoothlocation.R.id.textView1;
 import static com.example.fanwe.bluetoothlocation.R.id.textView2;
+import static com.example.fanwe.bluetoothlocation.R.id.time;
 import static com.example.fanwe.bluetoothlocation.R.id.webview;
 
 /**
@@ -64,10 +69,10 @@ public class ShowMapActivityFragment extends Fragment implements Cloneable {
     TextView mTextAcc;
     TextView mTextGyro;
     int RSSI_LIMIT = 5, BLE_CHOOSED_NUM = 3;
-    float PERCENTILE_LIMIT = 0.5f;
+    float PERCENTILE_LIMIT = 0.3f;
 
     //蓝牙有关的参数
-    Double[] location = new Double[2];
+    Double[] locationFilterd = new Double[2];
     Map<String, List<Double>> mAllRssi = new HashMap<>();  //储存RSSI的MAP
     Map<String, List<Double>> mTest = new HashMap<>();  //储存键为MAC地址，值为过滤后的RSSI的MAP
     Map<String, Double> mRssiFilterd = new HashMap<>();     //过滤后的RSSI的Map
@@ -75,7 +80,7 @@ public class ShowMapActivityFragment extends Fragment implements Cloneable {
     StringBuffer stringBuffer = new StringBuffer();
     Map<String, Double[]> bleNodeLoc = new HashMap<>(); //固定节点的位置Map
     BluetoothAdapter bluetoothAdapter = BluetoothAdapter.getDefaultAdapter();
-    ArrayList<Double[]> locationList = new ArrayList<>();
+    ArrayList<String> locationList = new ArrayList<>();
 
 
 
@@ -83,14 +88,17 @@ public class ShowMapActivityFragment extends Fragment implements Cloneable {
 
     //传感器有关的参数
     int ACC_LIMIT = 10, TIME0 = 200;
+    long timeLastUpdate = 0;
     long[] timeArray = new long[2];
     Double Sx = 0.0, Sy = 0.0, V0x = 0.0, V0y = 0.0, ax = 0.0, ay = 0.0;
     float[] rotVecValues = {0, 0, 0, 0}, accValues = {0, 0, 0}, gyroValues = {0, 0, 0};
     SparseArray<ArrayList<Float>> accValueList = new SparseArray<>();   //维持一定时间内的加速计历次读数的列表
+    LongSparseArray<Double[]> locationBasedOnSensor = new LongSparseArray<>();
+    Long anchorTime = Calendar.getInstance().getTimeInMillis();
+
 
     //传感器事件监听器
     private SensorEventListener listener = new SensorEventListener() {
-
         @Override
         public void onSensorChanged(SensorEvent event) {
             switch (event.sensor.getType()) {
@@ -99,11 +107,28 @@ public class ShowMapActivityFragment extends Fragment implements Cloneable {
                     break;
                 case Sensor.TYPE_GYROSCOPE:
                     gyroValues = event.values.clone();
-                    filterGyroValue(gyroValues);
+                    gyroValues = filterGyroValue(gyroValues);
                     break;
                 case Sensor.TYPE_ACCELEROMETER:
                     accValues = event.values.clone();
-                    filterAccValues(accValues);
+//                    final float[] accValuesTemp = event.values.clone();
+//                    accValues = filterAccValues(accValuesTemp);
+//                    Thread thread = new Thread(new Runnable() {
+//                        @Override
+//                        public void run() {
+//                            try {
+//                                Calendar now = Calendar.getInstance();
+//                                Long timeInMillis = now.getTimeInMillis();
+////                                String need1 =  (timeInMillis-anchorTime) + "  " + String.valueOf(accValues[2]) + "   " + String.valueOf(accValuesTemp[2]) +"\n";
+////                                String need1 =  (timeInMillis-anchorTime) + "  " + String.valueOf(accValues[0]) + " " + String.valueOf(accValues[1]) + " " + String.valueOf(accValues[2]) + "   " +String.valueOf(accValuesTemp[0]) + " " + String.valueOf(accValuesTemp[1]) + " " + String.valueOf(accValuesTemp[2]) +"\n";
+////                                FileCache.saveFile(need1);
+//                            } catch (Exception e) {
+//                                e.printStackTrace();
+//                            }
+//                        }
+//                    });
+//                    thread.start();
+//                    updateLocationBasedOnSensor();
                     break;
             }
         }
@@ -155,6 +180,26 @@ public class ShowMapActivityFragment extends Fragment implements Cloneable {
         });
     }
 
+    public void updateLocationBasedOnSensor(){
+        float[] pQuaternion = new float[4];
+        SensorManager.getQuaternionFromVector(pQuaternion, rotVecValues);  //由旋转矢量获得四元数
+        Double[] accConverted = getConvertAcc(getAccCompleted(accValues), pQuaternion);  //将加速度矢量转换到地理坐标系
+        ax = accConverted[0];
+        ay = accConverted[1];
+
+        Calendar calendar = Calendar.getInstance();
+        Long currentMillisecond = calendar.getTimeInMillis();
+        long timeDiff = currentMillisecond - timeLastUpdate;
+        Sx += V0x * timeDiff + 0.5 * ax * timeDiff * timeDiff;   //计算时时间单位应该用秒
+        Sy += V0y * timeDiff + 0.5 * ay * timeDiff * timeDiff;
+        V0x = V0x + ax * timeDiff;
+        V0y = V0y + ay * timeDiff;
+        Double[] location = {Sx,Sy};
+        locationBasedOnSensor.put(currentMillisecond, location);
+
+        timeLastUpdate = currentMillisecond;
+    }
+
 
     //根据四元数转换方式，将加速度矢量转换到地理坐标系
     public Double[] getConvertAcc(float[] p_1, float[] q) {
@@ -167,32 +212,36 @@ public class ShowMapActivityFragment extends Fragment implements Cloneable {
         return pDouble;
     }
     //过滤陀螺仪数据
-    public void filterGyroValue(float[] gyroValues) {
+    public float[] filterGyroValue(float[] gyroValues) {
         for (int i = 0; i < gyroValues.length; i++) {
-            gyroValues[i] = (Math.abs(gyroValues[i]) > 0.01) ? gyroValues[i] : 0;  //如果陀螺仪的值小于0.01则认为直接为0
+            gyroValues[i] = (Math.abs(gyroValues[i]) > 0.1) ? gyroValues[i] : 0;  //如果陀螺仪的值小于0.01则认为直接为0
         }
+        return gyroValues;
     }
     //加速计去除零漂,认为匀加速运动比较少，将匀加速和静止不动合并起来，都去掉
-    public void filterAccValues(float[] accValues) {
+    public float[] filterAccValues(float[] accValues) {
+        float[] accValueForReturn = new float[3];
         for (int i = 0; i < accValues.length; i++) {
             //将得到的加速度值存储起来
-            ArrayList<Float> valueList = new ArrayList<>();
-            valueList = accValueList.get(i);
+            ArrayList<Float> valueList = accValueList.get(i);
             valueList.add(0, accValues[i]);
             if (valueList.size() > 15) {
                 valueList.remove(10);   //维持长度小于10
             }
             ArrayList<Float> percentileList = accValueList.get(i + 3);
             valueList = cutList(valueList, ACC_LIMIT);
-            float percentile = Math.abs((valueList.get(1) - valueList.get(0)) / valueList.get(0));
-            if (percentile > PERCENTILE_LIMIT) {   //当变化比例超过0.1时，认为是真实的变化。
+//            float percentile = Math.abs((valueList.get(1) - valueList.get(0)) / valueList.get(0));
+            float percentile = Math.abs(valueList.get(1) - valueList.get(0));
+            if (percentile > PERCENTILE_LIMIT) {   //当变化比例超过PERCENTILE_LIMIT时，认为是真实的变化。
                 percentileList.add(0, percentile);
+                accValueForReturn[i] = accValues[i];
             }
             else {
                 percentileList.add(0, 0.0f);
-                accValues[i] = 0.0f;
+                accValueForReturn[i] = 0.0f;
             }
         }
+        return accValueForReturn;
     }
 
 
@@ -238,6 +287,7 @@ public class ShowMapActivityFragment extends Fragment implements Cloneable {
     public BroadcastReceiver mReceiver = new BroadcastReceiver() {
         String dFinished = BluetoothAdapter.ACTION_DISCOVERY_FINISHED;
 
+
         @Override
         public void onReceive(Context context, Intent intent) {
             Log.d("hahahah","hhahahaha");
@@ -263,22 +313,13 @@ public class ShowMapActivityFragment extends Fragment implements Cloneable {
                         mTest.put(remoteMAC, rssiValueFilterd);
                         mRssiFilterd.put(remoteMAC, getAvg(rssiValueFilterd));   //更新MAC地址对应信号强度的map
                         if (mRssiFilterd.size() > 2) {
-                            listSortedNode = getSort(mRssiFilterd, BLE_CHOOSED_NUM);     //得到按距离排序的蓝牙节点的列表
-                            location = getNearestNode(listSortedNode, bleNodeLoc);   //定位为最近的节点的位置。
+                            listSortedNode = sortNodeBasedOnRssi(mRssiFilterd, BLE_CHOOSED_NUM);     //得到按距离排序的蓝牙节点的列表
+                            String locationNearest = listSortedNode.get(0);
+//                            Double[] locationNearest = getNearestNode(listSortedNode, bleNodeLoc);   //定位为最近的节点的位置。
                             //                            location = getMassCenterLocation(listSortedNode, bleNodeLoc);   //通过质心定位得到位置
-                            String need1 = location[0].toString() + "," +location[1].toString();
-                            locationList.add(0, location);
-                            Log.d("hahaha", need1);
-                            String need = listSortedNode.get(0).split(":")[5];
-//                            SimpleDateFormat df = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault());
-//                            df.format(System.currentTimeMillis());
-                            long time = System.currentTimeMillis() - timeLastCall;
-
-
-                            if(getSensorConfirm(locationList) == 1){
-//                                webView.loadUrl(setInsetJS(location[0] + "", location[1] + ""));
-                            }
-
+                            locationList.add(0, locationNearest);
+                            locationFilterd = filterLocation();
+                            webView.loadUrl(setInsetJS(locationFilterd[0] + "", locationFilterd[1] + ""));
 
 //                            Thread thread = new Thread(
 //                                    new Runnable() {
@@ -302,6 +343,23 @@ public class ShowMapActivityFragment extends Fragment implements Cloneable {
 //                                }
 //                            });
 //                            thread.start();
+
+                            Thread thread = new Thread(new Runnable() {
+                                @Override
+                                public void run() {
+                                    try {
+                                        Calendar now = Calendar.getInstance();
+                                        Long timeInMillis = now.getTimeInMillis();
+                                String need1 =  (timeInMillis-anchorTime) + "  " + locationFilterd[0] + "  " + locationFilterd[1] +"\n";
+                                FileCache.saveFile(need1);
+                                    } catch (Exception e) {
+                                        e.printStackTrace();
+                                    }
+                                }
+                            });
+                            thread.start();
+
+
                         }
                         else {
                             timeArray[1] = System.currentTimeMillis();
@@ -311,6 +369,39 @@ public class ShowMapActivityFragment extends Fragment implements Cloneable {
             }
         }
     };
+
+    public Double[] filterLocation(){
+        Double[] toReturn = new Double[2];
+        if (locationList.size() >25) {
+            Map<String, Integer> locationCountMap = new HashMap<>();
+
+            locationCountMap.put(locationList.get(0), 1);
+            for (int i = 1; i < locationList.size(); i++) {
+                Double[] location = locationList.get(i);
+                if(locationCountMap.containsKey(location)){
+                    locationCountMap.put(location, locationCountMap.get(location) + 1);
+                }else {
+                    locationCountMap.put(location,1);
+                }
+            }
+            toReturn = sortLocationBasedOnCount(locationCountMap);
+        }else{
+            toReturn = locationList.get(0);
+        }
+        return  toReturn;
+    }
+
+    public Double[] sortLocationBasedOnCount(Map<Double[],Integer> locationCountMap){
+        List<Map.Entry<Double[], Integer>> infoIds =
+                new ArrayList<>(locationCountMap.entrySet());
+        Collections.sort(infoIds, new Comparator<Map.Entry<Double[], Integer>>() {        //排序
+            public int compare(Map.Entry<Double[], Integer> o1, Map.Entry<Double[], Integer> o2) {
+                return o2.getValue().compareTo(o1.getValue());
+            }
+        });
+        return infoIds.get(0).getKey();
+    }
+
 
     private int getSensorConfirm(ArrayList<Double[]> locationList){
         if(locationList.get(0) != locationList.get(1)){
@@ -421,7 +512,7 @@ public class ShowMapActivityFragment extends Fragment implements Cloneable {
     }
 
     //根据RSSI强度，对MAC地址排序
-    public ArrayList<String> getSort(Map<String, Double> mRssiFilterd, int BLE_CHOOSED_NUM) {
+    public ArrayList<String> sortNodeBasedOnRssi(Map<String, Double> mRssiFilterd, int BLE_CHOOSED_NUM) {
         List<Map.Entry<String, Double>> infoIds =
                 new ArrayList<>(mRssiFilterd.entrySet());
         ArrayList<String> list = new ArrayList<>();
