@@ -72,7 +72,7 @@ public class ShowMapActivityFragment extends Fragment implements Cloneable {
     float PERCENTILE_LIMIT = 0.3f;
 
     //蓝牙有关的参数
-    Double[] locationFilterd = new Double[2];
+    String locationFilterd;
     Map<String, List<Double>> mAllRssi = new HashMap<>();  //储存RSSI的MAP
     Map<String, List<Double>> mTest = new HashMap<>();  //储存键为MAC地址，值为过滤后的RSSI的MAP
     Map<String, Double> mRssiFilterd = new HashMap<>();     //过滤后的RSSI的Map
@@ -319,7 +319,7 @@ public class ShowMapActivityFragment extends Fragment implements Cloneable {
                             //                            location = getMassCenterLocation(listSortedNode, bleNodeLoc);   //通过质心定位得到位置
                             locationList.add(0, locationNearest);
                             locationFilterd = filterLocation();
-                            webView.loadUrl(setInsetJS(locationFilterd[0] + "", locationFilterd[1] + ""));
+//                            webView.loadUrl(setInsetJS(locationFilterd[0] + "", locationFilterd[1] + ""));
 
 //                            Thread thread = new Thread(
 //                                    new Runnable() {
@@ -350,8 +350,8 @@ public class ShowMapActivityFragment extends Fragment implements Cloneable {
                                     try {
                                         Calendar now = Calendar.getInstance();
                                         Long timeInMillis = now.getTimeInMillis();
-                                String need1 =  (timeInMillis-anchorTime) + "  " + locationFilterd[0] + "  " + locationFilterd[1] +"\n";
-                                FileCache.saveFile(need1);
+//                                String need1 =  (timeInMillis-anchorTime) + "  " + locationFilterd[0] + "  " + locationFilterd[1] +"\n";
+//                                FileCache.saveFile(need1);
                                     } catch (Exception e) {
                                         e.printStackTrace();
                                     }
@@ -370,14 +370,14 @@ public class ShowMapActivityFragment extends Fragment implements Cloneable {
         }
     };
 
-    public Double[] filterLocation(){
-        Double[] toReturn = new Double[2];
+    public String filterLocation(){
+        String toReturn;
         if (locationList.size() >25) {
             Map<String, Integer> locationCountMap = new HashMap<>();
 
             locationCountMap.put(locationList.get(0), 1);
             for (int i = 1; i < locationList.size(); i++) {
-                Double[] location = locationList.get(i);
+                String location = locationList.get(i);
                 if(locationCountMap.containsKey(location)){
                     locationCountMap.put(location, locationCountMap.get(location) + 1);
                 }else {
@@ -391,11 +391,11 @@ public class ShowMapActivityFragment extends Fragment implements Cloneable {
         return  toReturn;
     }
 
-    public Double[] sortLocationBasedOnCount(Map<Double[],Integer> locationCountMap){
-        List<Map.Entry<Double[], Integer>> infoIds =
+    public String sortLocationBasedOnCount(Map<String,Integer> locationCountMap){
+        List<Map.Entry<String, Integer>> infoIds =
                 new ArrayList<>(locationCountMap.entrySet());
-        Collections.sort(infoIds, new Comparator<Map.Entry<Double[], Integer>>() {        //排序
-            public int compare(Map.Entry<Double[], Integer> o1, Map.Entry<Double[], Integer> o2) {
+        Collections.sort(infoIds, new Comparator<Map.Entry<String, Integer>>() {        //排序
+            public int compare(Map.Entry<String, Integer> o1, Map.Entry<String, Integer> o2) {
                 return o2.getValue().compareTo(o1.getValue());
             }
         });
