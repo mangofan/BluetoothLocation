@@ -72,7 +72,8 @@ public class ShowMapActivityFragment extends Fragment implements Cloneable {
     float PERCENTILE_LIMIT = 0.3f;
 
     //蓝牙有关的参数
-    String locationFilterd;
+    String locationFilterdinMac = "19:18:FC:01:F1:0E";
+
     Map<String, List<Double>> mAllRssi = new HashMap<>();  //储存RSSI的MAP
     Map<String, List<Double>> mTest = new HashMap<>();  //储存键为MAC地址，值为过滤后的RSSI的MAP
     Map<String, Double> mRssiFilterd = new HashMap<>();     //过滤后的RSSI的Map
@@ -84,10 +85,8 @@ public class ShowMapActivityFragment extends Fragment implements Cloneable {
 
 
 
-
-
     //传感器有关的参数
-    int ACC_LIMIT = 10, TIME0 = 200;
+    int ACC_LIMIT = 10, TIME0 = 200, LOCATION_NUM_LIMIT = 20;
     long timeLastUpdate = 0;
     long[] timeArray = new long[2];
     Double Sx = 0.0, Sy = 0.0, V0x = 0.0, V0y = 0.0, ax = 0.0, ay = 0.0;
@@ -111,8 +110,9 @@ public class ShowMapActivityFragment extends Fragment implements Cloneable {
                     break;
                 case Sensor.TYPE_ACCELEROMETER:
                     accValues = event.values.clone();
-//                    final float[] accValuesTemp = event.values.clone();
-//                    accValues = filterAccValues(accValuesTemp);
+                    final float[] accValuesTemp = event.values.clone();
+
+                    accValues = filterAccValues(accValuesTemp);
 //                    Thread thread = new Thread(new Runnable() {
 //                        @Override
 //                        public void run() {
@@ -171,9 +171,11 @@ public class ShowMapActivityFragment extends Fragment implements Cloneable {
                 float[] pQuaternion = new float[4];
                 SensorManager.getQuaternionFromVector(pQuaternion, rotVecValues);  //由旋转矢量获得四元数
                 Double[] accConverted = getConvertAcc(getAccCompleted(accValues), pQuaternion);  //将加速度矢量转换到地理坐标系
-                String acc = String.valueOf(accConverted[0]) + '\n' + String.valueOf(accConverted[1]) + '\n' + String.valueOf(accConverted[2]) + '\n';  //
+                String acc = String.valueOf(accConverted[0]) + '\n' + String.valueOf(accConverted[1]) + '\n' + String.valueOf(accConverted[2]) + '\n';
+//                String rot = String.valueOf(rotVecValues[0]) + "\n" +String.valueOf(rotVecValues[1]) + "\n" +String.valueOf(rotVecValues[2]);
                 mTextAcc.setText(acc);
-                String gyro = String.valueOf(gyroValues[0]) + '\n' + String.valueOf(gyroValues[1]) + '\n' + String.valueOf(gyroValues[2]);
+                String gyro = String.valueOf(accValues[0]) + '\n' + String.valueOf(accValues[1]) + '\n' + String.valueOf(accValues[2]);
+//                String gyro = String.valueOf(gyroValues[0]) + '\n' + String.valueOf(gyroValues[1]) + '\n' + String.valueOf(gyroValues[2]);
                 mTextGyro.setText(gyro);
 
             }
@@ -218,31 +220,64 @@ public class ShowMapActivityFragment extends Fragment implements Cloneable {
         }
         return gyroValues;
     }
-    //加速计去除零漂,认为匀加速运动比较少，将匀加速和静止不动合并起来，都去掉
+
     public float[] filterAccValues(float[] accValues) {
-        float[] accValueForReturn = new float[3];
-        for (int i = 0; i < accValues.length; i++) {
+        float[] toReturn = new float[3];
+        for(int i = 0; i< accValues.length; i++) {
             //将得到的加速度值存储起来
             ArrayList<Float> valueList = accValueList.get(i);
             valueList.add(0, accValues[i]);
-            if (valueList.size() > 15) {
+            if (valueList.size() > 10) {
                 valueList.remove(10);   //维持长度小于10
             }
-            ArrayList<Float> percentileList = accValueList.get(i + 3);
-            valueList = cutList(valueList, ACC_LIMIT);
-//            float percentile = Math.abs((valueList.get(1) - valueList.get(0)) / valueList.get(0));
-            float percentile = Math.abs(valueList.get(1) - valueList.get(0));
-            if (percentile > PERCENTILE_LIMIT) {   //当变化比例超过PERCENTILE_LIMIT时，认为是真实的变化。
-                percentileList.add(0, percentile);
-                accValueForReturn[i] = accValues[i];
-            }
-            else {
-                percentileList.add(0, 0.0f);
-                accValueForReturn[i] = 0.0f;
+            filterByBiasedNormalDistribution(valueList);
+        }
+        return toReturn;
+    }
+
+    public float filterByBiasedNormalDistribution(ArrayList<Float> valueList){
+        Double avg = getAvg(valueList);
+        Double staDev = getStaDev(valueList, avg, "normal");
+        Double limitHigh = avg + 3*staDev, limitLow = avg - 3*staDev;
+        for (int i = 0; i < valueList.size(); i++){
+            float targetValue = valueList.get(0);
+            if(targetValue < limitLow && targetValue > limitHigh){
+
+            }else {
+                return
             }
         }
-        return accValueForReturn;
+
+
     }
+
+    //加速计去除零漂,认为匀加速运动比较少，将匀加速和静止不动合并起来，都去掉
+//    public float[] filterAccValues(float[] accValues) {
+//        float[] accValueForReturn = new float[3];
+//        for (int i = 0; i < accValues.length; i++) {
+//            //将得到的加速度值存储起来
+//            ArrayList<Float> valueList = accValueList.get(i);
+//            valueList.add(0, accValues[i]);
+//            if (valueList.size() > 15) {
+//                valueList.remove(10);   //维持长度小于10
+//            }
+//            ArrayList<Float> percentileList = accValueList.get(i + 3);
+//            valueList = cutList(valueList, ACC_LIMIT);
+////            float percentile = Math.abs((valueList.get(1) - valueList.get(0)) / valueList.get(0));
+//            float percentile = Math.abs(valueList.get(1) - valueList.get(0));
+//            if (percentile > PERCENTILE_LIMIT) {   //当变化比例超过PERCENTILE_LIMIT时，认为是真实的变化。
+//                percentileList.add(0, percentile);
+//                accValueForReturn[i] = accValues[i];
+//            }
+//            else {
+//                percentileList.add(0, 0.0f);
+//                accValueForReturn[i] = 0.0f;
+//            }
+//        }
+//        return accValueForReturn;
+//    }
+
+
 
 
     //切割子list
@@ -290,7 +325,6 @@ public class ShowMapActivityFragment extends Fragment implements Cloneable {
 
         @Override
         public void onReceive(Context context, Intent intent) {
-            Log.d("hahahah","hhahahaha");
 
             BluetoothDevice remoteDevice = intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE);
             String remoteMAC;
@@ -316,10 +350,41 @@ public class ShowMapActivityFragment extends Fragment implements Cloneable {
                             listSortedNode = sortNodeBasedOnRssi(mRssiFilterd, BLE_CHOOSED_NUM);     //得到按距离排序的蓝牙节点的列表
                             String locationNearest = listSortedNode.get(0);
 //                            Double[] locationNearest = getNearestNode(listSortedNode, bleNodeLoc);   //定位为最近的节点的位置。
-                            //                            location = getMassCenterLocation(listSortedNode, bleNodeLoc);   //通过质心定位得到位置
+//                            location = getMassCenterLocation(listSortedNode, bleNodeLoc);   //通过质心定位得到位置
                             locationList.add(0, locationNearest);
-                            locationFilterd = filterLocation();
-//                            webView.loadUrl(setInsetJS(locationFilterd[0] + "", locationFilterd[1] + ""));
+                            webView.loadUrl(setInsetJS(bleNodeLoc.get(locationNearest)[0] + "", bleNodeLoc.get(locationNearest)[1] + ""));
+
+
+
+                            String locationFilterdinMacTemp = filterLocation();
+                            if(!locationFilterdinMacTemp.equals(locationFilterdinMac)) {
+                                final Double[] locationFilterdInCoordinate = bleNodeLoc.get(locationFilterdinMac);
+                                webView.loadUrl(setInsetJS(locationFilterdInCoordinate[0] + "", locationFilterdInCoordinate[1] + ""));
+                                locationFilterdinMac = locationFilterdinMacTemp;
+                                final ArrayList testList = (ArrayList) locationList.clone();
+                                try {
+                                    Calendar now = Calendar.getInstance();
+                                    Long timeInMillis = now.getTimeInMillis();
+                                    String need1 = (timeInMillis - anchorTime) + "  " + locationFilterdInCoordinate[0] + "  " + locationFilterdInCoordinate[1] + "\n" + changeLocationListToCoordinate(testList) + "\n\n";
+                                    FileCache.saveFile(need1);
+                                } catch (Exception e) {
+                                    e.printStackTrace();
+                                }
+
+//                                Thread thread = new Thread(new Runnable() {
+//                                    @Override
+//                                    public void run() {
+//                                        try {
+//                                            Calendar now = Calendar.getInstance();
+//                                            Long timeInMillis = now.getTimeInMillis();
+//                                            String need1 = (timeInMillis - anchorTime) + "  " + locationFilterdInCoordinate[0] + "  " + locationFilterdInCoordinate[1] + "\n" + changeLocationListToCoordinate(testList) + "\n\n";
+//                                            FileCache.saveFile(need1);
+//                                        } catch (Exception e) {
+//                                            e.printStackTrace();
+//                                        }
+//                                    }
+//                                });
+//                                thread.start();
 
 //                            Thread thread = new Thread(
 //                                    new Runnable() {
@@ -343,26 +408,7 @@ public class ShowMapActivityFragment extends Fragment implements Cloneable {
 //                                }
 //                            });
 //                            thread.start();
-
-                            Thread thread = new Thread(new Runnable() {
-                                @Override
-                                public void run() {
-                                    try {
-                                        Calendar now = Calendar.getInstance();
-                                        Long timeInMillis = now.getTimeInMillis();
-//                                String need1 =  (timeInMillis-anchorTime) + "  " + locationFilterd[0] + "  " + locationFilterd[1] +"\n";
-//                                FileCache.saveFile(need1);
-                                    } catch (Exception e) {
-                                        e.printStackTrace();
-                                    }
-                                }
-                            });
-                            thread.start();
-
-
-                        }
-                        else {
-                            timeArray[1] = System.currentTimeMillis();
+                            }
                         }
                     }
                 }
@@ -370,11 +416,22 @@ public class ShowMapActivityFragment extends Fragment implements Cloneable {
         }
     };
 
+    public ArrayList<String> changeLocationListToCoordinate(ArrayList<String> locationList){
+        ArrayList<String> toReturn = new ArrayList<>();
+        for (int i = 0; i < locationList.size(); i++){
+            Double[] test = bleNodeLoc.get(locationList.get(i));
+            toReturn.add(test[0].toString());
+            toReturn.add(test[1].toString());
+            toReturn.add(" ");
+        }
+        return toReturn;
+    }
+
+
     public String filterLocation(){
         String toReturn;
-        if (locationList.size() >25) {
+        if (locationList.size() > LOCATION_NUM_LIMIT) {
             Map<String, Integer> locationCountMap = new HashMap<>();
-
             locationCountMap.put(locationList.get(0), 1);
             for (int i = 1; i < locationList.size(); i++) {
                 String location = locationList.get(i);
@@ -385,6 +442,7 @@ public class ShowMapActivityFragment extends Fragment implements Cloneable {
                 }
             }
             toReturn = sortLocationBasedOnCount(locationCountMap);
+            locationList.remove(locationList.size() - 1);
         }else{
             toReturn = locationList.get(0);
         }
@@ -475,11 +533,11 @@ public class ShowMapActivityFragment extends Fragment implements Cloneable {
     }
 
     //求ArrayLIst均值
-    private Double getAvg(List<Double> list) {
+    private Double getAvg(List list) {
         Double sum = 0.0, avg = 0.0;
         if (list.size() != 0) {
             for (int i = 0; i < list.size(); i++) {
-                sum += list.get(i);
+                sum += (double)list.get(i);
             }
             avg = sum / list.size();
         }
@@ -487,11 +545,11 @@ public class ShowMapActivityFragment extends Fragment implements Cloneable {
     }
 
     //求ArrayList标准差
-    private Double getStaDev(ArrayList<Double> list, Double avg, String distribution) {
+    private Double getStaDev(ArrayList list, Double avg, String distribution) {
         Double stadardDev = 0.0;
         if (list.size() > 1) {
             for (int i = 0; i < list.size(); i++) {
-                stadardDev += Math.pow((list.get(i) - avg), 2);
+                stadardDev += Math.pow(((double)list.get(i) - avg), 2);
             }
             if (distribution.equals("logarNormal"))
                 stadardDev = Math.sqrt(stadardDev / list.size());
@@ -526,7 +584,6 @@ public class ShowMapActivityFragment extends Fragment implements Cloneable {
         for (int i = 0; i < limit; i++) {        //排序完,取前limit个
             String id = infoIds.get(i).toString();
             list.add(id.split("=")[0]);   //string.split后变为字符串数组。
-//            System.out.println(id);
         }
         return list;     //排序好的MAC地址的列表
     }
