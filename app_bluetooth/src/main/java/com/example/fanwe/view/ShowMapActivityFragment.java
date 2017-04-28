@@ -62,6 +62,7 @@ public class ShowMapActivityFragment extends Fragment implements Cloneable {
     TextView mTextAcc;
     TextView mTextGyro;
     int RSSI_LIMIT = 5, BLE_CHOOSED_NUM = 3;
+    SensorManager sensorManager;
 //    float PERCENTILE_LIMIT = 0.3f;
 
     //蓝牙有关的参数
@@ -72,7 +73,7 @@ public class ShowMapActivityFragment extends Fragment implements Cloneable {
     StringBuffer stringBuffer = new StringBuffer();
     Map<String, Double[]> bleNodeLoc = new HashMap<>(); //固定节点的位置Map
     BluetoothAdapter bluetoothAdapter = BluetoothAdapter.getDefaultAdapter();
-    ArrayList<String> locationList = new ArrayList<>();
+    ArrayList<String> locationListOfNearest = new ArrayList<>();
     Long timeLast;
     String locationLast;
 
@@ -80,7 +81,7 @@ public class ShowMapActivityFragment extends Fragment implements Cloneable {
 
 
     //传感器有关的参数
-    int TIME0 = 200, LOCATION_NUM_LIMIT = 20, conutForInitialize = 0;
+    int TIME0 = 200, LOCATION_NUM_LIMIT = 25, conutForInitialize = 0;
     long[] timeArray = new long[2];
     Double Sx = 0.0, Sy = 0.0, V0x = 0.0, V0y = 0.0, ax = 0.0, ay = 0.0;
     float[] rotVecValues = {0, 0, 0, 0}, accValues = {0, 0, 0}, gyroValues = {0, 0, 0};
@@ -88,6 +89,7 @@ public class ShowMapActivityFragment extends Fragment implements Cloneable {
     LongSparseArray<Double[]> locationBasedOnSensor = new LongSparseArray<>();
     Double[] accBias = {0.0,0.0,0.0}, accStaDev =  {0.0,0.0,0.0};
     ArrayList<Long> listOfTime = new ArrayList<>();
+    ArrayList<String> A = new ArrayList<>();
 
     //传感器事件监听器
     private SensorEventListener listener = new SensorEventListener() {
@@ -131,7 +133,21 @@ public class ShowMapActivityFragment extends Fragment implements Cloneable {
         updateTimer.scheduleAtFixedRate(new TimerTask() {
             @Override
             public void run() {
-                updateGUI();
+//                updateGUI();
+//                Thread thread = new Thread(
+//                        new Runnable() {
+//                            @Override
+//                            public void run() {
+//                                try {
+//                                    Long timeInMillis = Calendar.getInstance().getTimeInMillis();
+//                                    String need1 = timeInMillis.toString() + " " + A.toString();
+//                                    FileCache.saveFile(need1);
+//                                } catch (Exception e) {
+//                                    e.printStackTrace();
+//                                }
+//                            }
+//                        });
+//                thread.start();
             }
         }, 0, TIME0);
         EventBus.getDefault().register(this);
@@ -143,7 +159,6 @@ public class ShowMapActivityFragment extends Fragment implements Cloneable {
         getActivity().runOnUiThread(new Runnable() {
             @Override
             public void run() {
-
             }
         });
     }
@@ -154,14 +169,13 @@ public class ShowMapActivityFragment extends Fragment implements Cloneable {
         SensorManager.getQuaternionFromVector(pQuaternion, rotVecValues);  //由旋转矢量获得四元数
         Double[] accConverted = getConvertAcc(getAccCompleted(accValues), pQuaternion);  //将加速度矢量转换到地理坐标系
         accConverted = filterAccValues(accConverted);
-        ax = accConverted[0];
+        ax = -accConverted[0];
         ay = accConverted[1];
 
-        Calendar calendar = Calendar.getInstance();
-        Long currentMillisecond = calendar.getTimeInMillis();
-        long timeDiff = currentMillisecond - listOfTime.get(0);
+        Long currentMillisecond = Calendar.getInstance().getTimeInMillis();
+        double timeDiff = (currentMillisecond - listOfTime.get(0)) / 1000.0;
 
-        if(ax.equals(0.0) && ay.equals(0.0)){
+        if((Math.abs(ax) == 0.0) && (Math.abs(ay) == 0.0)){
             V0x = 0.0;
             V0y = 0.0;
         }else{
@@ -171,6 +185,12 @@ public class ShowMapActivityFragment extends Fragment implements Cloneable {
 
         Sx += V0x * timeDiff + 0.5 * ax * timeDiff * timeDiff;   //计算时时间单位应该用秒
         Sy += V0y * timeDiff + 0.5 * ay * timeDiff * timeDiff;
+
+        mTextAcc.setText(ax + "," + ay + "\n" + V0x + "," + V0y);
+        mTextGyro.setText(Sx + "\n" + Sy + "");
+
+        webView.loadUrl(setInsetJS(Sx + "", Sy + "","circle_point"));
+
         Double[] location = {Sx,Sy};
         locationBasedOnSensor.put(currentMillisecond, location);
 
@@ -298,25 +318,25 @@ public class ShowMapActivityFragment extends Fragment implements Cloneable {
                         if (mRssiFilterd.size() > 2) {
                             List<String> listSortedNode = sortNodeBasedOnRssi(mRssiFilterd, BLE_CHOOSED_NUM);     //得到按距离排序的蓝牙节点的列表
                             String locationNearest = listSortedNode.get(0);
+                            locationListOfNearest.add(0,listSortedNode.get(0));
                             String locationBasedOnMajority = filterLocation();    //由多数法选出可能的点
 
-                            locationList.add(0,listSortedNode.get(0));
 //                            Double[] locationNearest = getNearestNode(listSortedNode, bleNodeLoc);   //定位为最近的节点的位置。
 //                            location = getMassCenterLocation(listSortedNode, bleNodeLoc);   //通过质心定位得到位置
                             if(conutForInitialize == 1) {
-
                                 if (!locationBasedOnMajority.equals(locationLast)) {    //当新出现的节点与上一个定位点不相同时
                                     String locationTrue = getSensorConfirm(locationLast, locationBasedOnMajority, timeLast,currentMillisecondBluetooth);
                                     timeLast = currentMillisecondBluetooth;
                                     locationLast = locationTrue;
                                 }
                             }else{
-                                locationLast = locationList.get(0);
+                                locationLast = locationListOfNearest.get(0);
                                 timeLast = currentMillisecondBluetooth;
                                 conutForInitialize = 1;
                             }
-                            webView.loadUrl(setInsetJS(bleNodeLoc.get(locationLast)[0] + "", bleNodeLoc.get(locationLast)[1] + "","circle_point"));
-                            webView.loadUrl(setInsetJS(bleNodeLoc.get(locationBasedOnMajority)[0] + "", bleNodeLoc.get(locationBasedOnMajority)[1] + "","circle_point2"));
+//                            webView.loadUrl(setInsetJS(bleNodeLoc.get(locationLast)[0] + "", bleNodeLoc.get(locationLast)[1] + "","circle_point"));
+//                            webView.loadUrl(setInsetJS(bleNodeLoc.get(locationNearest)[0] + "", bleNodeLoc.get(locationNearest)[1] + "","circle_point"));
+//                            webView.loadUrl(setInsetJS(bleNodeLoc.get(locationBasedOnMajority)[0] + "", bleNodeLoc.get(locationBasedOnMajority)[1] + "","circle_point2"));
                         }
                     }
                 }
@@ -374,14 +394,14 @@ public class ShowMapActivityFragment extends Fragment implements Cloneable {
         return angle;
     }
 
-    //在locationList中选择多数作为当前的位置。
+    //在locationListOfNearest中选择多数作为当前的位置。
     public String filterLocation(){
-        String toReturn;
-        if (locationList.size() > LOCATION_NUM_LIMIT) {
+        final String toReturn;
+        if (locationListOfNearest.size() > LOCATION_NUM_LIMIT) {
             Map<String, Integer> locationCountMap = new HashMap<>();
-            locationCountMap.put(locationList.get(0), 1);
-            for (int i = 1; i < locationList.size(); i++) {
-                String location = locationList.get(i);
+            locationCountMap.put(locationListOfNearest.get(0), 1);
+            for (int i = 1; i < locationListOfNearest.size(); i++) {
+                String location = locationListOfNearest.get(i);
                 if(locationCountMap.containsKey(location)){
                     locationCountMap.put(location, locationCountMap.get(location) + 1);
                 }else {
@@ -389,9 +409,9 @@ public class ShowMapActivityFragment extends Fragment implements Cloneable {
                 }
             }
             toReturn = sortLocationBasedOnCount(locationCountMap);
-            locationList.remove(locationList.size() - 1);
+            locationListOfNearest.remove(locationListOfNearest.size() - 1);
         }else{
-            toReturn = locationList.get(0);   //在列表长度小于限制时，以列表头元素作为频率最高的值，
+            toReturn = locationListOfNearest.get(0);   //在列表长度小于限制时，以列表头元素作为频率最高的值，
         }
         return  toReturn;
     }
@@ -410,10 +430,10 @@ public class ShowMapActivityFragment extends Fragment implements Cloneable {
 
 
 
-    public ArrayList<String> changeLocationListToCoordinate(ArrayList<String> locationList){
+    public ArrayList<String> changelocationListOfNearestToCoordinate(ArrayList<String> locationListOfNearest){
         ArrayList<String> toReturn = new ArrayList<>();
-        for (int i = 0; i < locationList.size(); i++){
-            Double[] test = bleNodeLoc.get(locationList.get(i));
+        for (int i = 0; i < locationListOfNearest.size(); i++){
+            Double[] test = bleNodeLoc.get(locationListOfNearest.get(i));
             toReturn.add(test[0].toString());
             toReturn.add(test[1].toString());
             toReturn.add(" ");
@@ -557,7 +577,7 @@ public class ShowMapActivityFragment extends Fragment implements Cloneable {
     }
     //和sensor有关的初始化
     private void initSensor() {
-        SensorManager sensorManager = (SensorManager) getActivity().getSystemService(Context.SENSOR_SERVICE);
+        sensorManager = (SensorManager) getActivity().getSystemService(Context.SENSOR_SERVICE);
         Sensor rotVectorSensor = sensorManager.getDefaultSensor(Sensor.TYPE_ROTATION_VECTOR);
         Sensor accSensor = sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER);
         Sensor gyroSensor = sensorManager.getDefaultSensor(Sensor.TYPE_GYROSCOPE);
@@ -622,7 +642,7 @@ public class ShowMapActivityFragment extends Fragment implements Cloneable {
 
     @Override
     public void onPause() {
-//        sensorManager.unregisterListener(listener);
+        sensorManager.unregisterListener(listener);
         super.onPause();
     }
 
@@ -720,11 +740,11 @@ public class ShowMapActivityFragment extends Fragment implements Cloneable {
 //                                final Double[] locationFilterdInCoordinate = bleNodeLoc.get(locationFilterdinMac);
 //                                webView.loadUrl(setInsetJS(locationFilterdInCoordinate[0] + "", locationFilterdInCoordinate[1] + ""));
 //                                locationFilterdinMac = locationFilterdinMacTemp;
-//                                final ArrayList testList = (ArrayList) locationList.clone();
+//                                final ArrayList testList = (ArrayList) locationListOfNearest.clone();
 //                                try {
 //                                    Calendar now = Calendar.getInstance();
 //                                    Long timeInMillis = now.getTimeInMillis();
-//                                    String need1 = (timeInMillis - anchorTime) + "  " + locationFilterdInCoordinate[0] + "  " + locationFilterdInCoordinate[1] + "\n" + changeLocationListToCoordinate(testList) + "\n\n";
+//                                    String need1 = (timeInMillis - anchorTime) + "  " + locationFilterdInCoordinate[0] + "  " + locationFilterdInCoordinate[1] + "\n" + changelocationListOfNearestToCoordinate(testList) + "\n\n";
 //                                    FileCache.saveFile(need1);
 //                                } catch (Exception e) {
 //                                    e.printStackTrace();
@@ -754,6 +774,21 @@ public class ShowMapActivityFragment extends Fragment implements Cloneable {
 //                            });
 //                            thread.start();
 //                            }
+
+//    Thread thread = new Thread(
+//            new Runnable() {
+//                @Override
+//                public void run() {
+//                    try {
+//                        String need1 = time.toString() + "  " + bleNodeLoc.get(toReturn)[0].toString() + ","
+//                                + bleNodeLoc.get(toReturn)[0].toString() + "\n" + locationListOfNearestClone + "\n";
+//                        FileCache.saveFile(need1);
+//                    } catch (Exception e) {
+//                        e.printStackTrace();
+//                    }
+//                }
+//            });
+//        thread.start();
 
 
 
