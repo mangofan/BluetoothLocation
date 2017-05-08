@@ -5,8 +5,8 @@ android {
     buildToolsVersion "25.0.2"
     defaultConfig {
         applicationId "com.example.fanwe.bluetoothlocation"
-        minSdkVersion 15
-        targetSdkVersion 25
+        minSdkVersion 19
+        targetSdkVersion 19
         vectorDrawables.useSupportLibrary = true
         versionCode 1
         versionName "1.0"
