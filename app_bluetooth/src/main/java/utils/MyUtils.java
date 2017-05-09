@@ -15,18 +15,17 @@ import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.regex.Matcher;
 
 import static utils.Quaternion.getQuaternionInverse;
 import static utils.Quaternion.getQuaternionMulit;
 
 public class MyUtils {
 
-    private static double Sx = 0f, Sy = 0f;
+    private static double Sx = 14f, Sy = 0f;
     private static Double[] accBias = {0.0,0.0,0.0}, accStaDev =  {0.0,0.0,0.0};
     private static LongSparseArray<double[]> locationBasedOnSensor = new LongSparseArray<>();
 
-    public static double getAngleBiasInRadius(float angle, double angleBiased){
+    public static double getAngleFixed(float angle, double angleBiased){
         double angleBiasedInR = angleBiased * Math.PI / 180;
         double angleFixed = angle - angleBiasedInR;
         if(angleFixed < - Math.PI){
@@ -37,38 +36,34 @@ public class MyUtils {
             return angleFixed;
     }
 
+    private static void positiveOrientationList(ArrayList<Double> listOfOrientation){
+        for(int i = 0; i < listOfOrientation.size(); i++){
+            double value = listOfOrientation.get(i);
+            if(value < 0) {
+                value += 2 * Math.PI;
+                listOfOrientation.set(i,value);
+            }
+        }
+    }
 
+    // TODO: 2017/5/9 朝南走的时候仍然不好，检查并修复
     //每步产生时记录位置，记录时间，为了以后的查询中使用
     public static double[] makeOneStepProcess(ArrayList<Double> listOfOrientation, ArrayList<Long>listOfTime){
         long currentTime = Calendar.getInstance().getTimeInMillis();
+        double staDevOOrientation = getStaDev(listOfOrientation,getAvg(listOfOrientation),"not sure");
+        if(staDevOOrientation > 1.5) {       //方差过大时，认为方向应该为朝向南，处于正负180度之间造成的平均值出现误差，处理方法是将所有负数值加2π。
+            positiveOrientationList(listOfOrientation);
+        }
         double avgOrientation = getAvg(listOfOrientation);
+        double staDev = getStaDev(listOfOrientation, avgOrientation,"not sure");
         double stepLength = 0.6;
         Sx += -Math.sin(avgOrientation) * stepLength;   //原坐标轴以东为正，现在坐标轴以西为正
         Sy += Math.cos(avgOrientation) * stepLength;
         listOfOrientation.clear();
-        double[] location = {Sx,Sy};
+        double[] location = {Sx,Sy, staDev};
         locationBasedOnSensor.put(currentTime, location);
         listOfTime.add(0,currentTime);
-
-        //以时间差不能超过6秒钟的条件维持map大小。
-
-//        long oldestTime = listOfTime.get(listOfTime.size()-1);  //因为列表构建时是从头插入，所以最古老的的元素在末尾
-//        if((currentTime - oldestTime) > 6000){
-//            listOfTime.remove(oldestTime);
-//            locationBasedOnSensor.delete(oldestTime);
-//        }
-        return  location;
-    }
-
-    public static ArrayList<String> changelocationListOfNearestToCoordinate(ArrayList<String> locationListOfNearest, Map<String, Double[]> bleNodeLoc){
-        ArrayList<String> toReturn = new ArrayList<>();
-        for (int i = 0; i < locationListOfNearest.size(); i++){
-            Double[] test = bleNodeLoc.get(locationListOfNearest.get(i));
-            toReturn.add(test[0].toString());
-            toReturn.add(test[1].toString());
-            toReturn.add(" ");
-        }
-        return toReturn;
+        return location;
     }
 
     //求向量夹角的cos
@@ -100,15 +95,18 @@ public class MyUtils {
             }
         }
         long timeQuery = listOfTime.get(j);
-        double[] toReturn = locationBasedOnSensor.get(timeQuery);
-        String mark = "cutFromOldTime";
-        if(howToDealWithTimeList.equals(mark) && (listOfTime.size()-1 != j)) {
+        long sensorLatestUpdateTime = listOfTime.get(0);    //时间列表最后更新的时间
+
+        double[] hahh = {0.0,0.0};     //初始进入时，有可能传感器定位还没有值，此时给定值为0,0
+        double[] testReturn = locationBasedOnSensor.get(timeQuery, hahh);
+        String mark = "cutFromOldTime";                  //正常情况下，测试是否为对旧时间的query，如果是的话对list进行维持长度的操作。
+        if (howToDealWithTimeList.equals(mark) && (listOfTime.size() - 1 != j)) {
             for (int k = listOfTime.size() - 1; k > j; k--) {
                 locationBasedOnSensor.delete(listOfTime.get(k));
                 listOfTime.remove(k);
             }
         }
-        return toReturn;
+        return testReturn;
     }
 
     //在locationListOfNearest中选择多数作为当前的位置。
@@ -234,7 +232,7 @@ public class MyUtils {
     }
 
     //求ArrayList标准差
-    private static double getStaDev(ArrayList list, Double avg, String distribution) {
+    public static double getStaDev(ArrayList list, Double avg, String distribution) {
         double stadardDev = 0.0;
         if (list.size() > 1) {
             for (int i = 0; i < list.size(); i++) {
@@ -461,3 +459,22 @@ public class MyUtils {
 //                }
 //            });
 //        thread.start();
+
+
+//    public static void changeForNewNode(ArrayList<Long>listOfTime, double[]locationNew, long currentTime){
+//        listOfTime.add(0, currentTime);
+//        Sx = locationNew[0];
+//        Sy = locationNew[1];
+//        locationBasedOnSensor.put(currentTime,locationNew);
+//    }
+
+//    public static ArrayList<String> changelocationListOfNearestToCoordinate(ArrayList<String> locationListOfNearest, Map<String, Double[]> bleNodeLoc){
+//        ArrayList<String> toReturn = new ArrayList<>();
+//        for (int i = 0; i < locationListOfNearest.size(); i++){
+//            Double[] test = bleNodeLoc.get(locationListOfNearest.get(i));
+//            toReturn.add(test[0].toString());
+//            toReturn.add(test[1].toString());
+//            toReturn.add(" ");
+//        }
+//        return toReturn;
+//    }

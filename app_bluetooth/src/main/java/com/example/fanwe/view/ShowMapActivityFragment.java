@@ -46,11 +46,12 @@ import utils.MyUtils;
 
 import static com.example.fanwe.bluetoothlocation.R.id.textView1;
 import static com.example.fanwe.bluetoothlocation.R.id.textView2;
+import static com.example.fanwe.bluetoothlocation.R.id.time;
 import static com.example.fanwe.bluetoothlocation.R.id.webview;
 
 public class ShowMapActivityFragment extends Fragment implements Cloneable {
 
-    float angleBias = 24.04f;  //建筑物方向与正北向的夹角，建筑物方向是正北向的的北偏东多少度。
+    float angleBias = 19f;  //建筑物方向与正北向的夹角，建筑物方向是正北向的的北偏东多少度。
     private static final int ENABLE_BLUETOOTH = 1;
     WebView webView;
     TextView mTextAcc, mTextGyro;
@@ -59,6 +60,7 @@ public class ShowMapActivityFragment extends Fragment implements Cloneable {
 
     //蓝牙有关的参数
     long timeLast;
+    long lastTime = 0;
     String locationLast;
     StringBuffer stringBuffer = new StringBuffer();
     Map<String, List<Double>> mAllRssi = new HashMap<>();    //储存RSSI的MAP
@@ -90,27 +92,30 @@ public class ShowMapActivityFragment extends Fragment implements Cloneable {
                     SensorManager.getRotationMatrixFromVector(rotationMatrix, rotVecValuesCopy);
                     float[] orientation = new float[3];
                     SensorManager.getOrientation(rotationMatrix, orientation);
-                    double angleFixed  = MyUtils.getAngleBiasInRadius(orientation[0], angleBias);
-                    String need = angleFixed + "\n" + orientation[1] + "\n" + orientation[2] + "\n";
+                    double angleFixed  = MyUtils.getAngleFixed(orientation[0], angleBias);
+                    String need = angleFixed + "\n" + orientation[0];
                     mTextGyro.setText(need);
                     listOfOrientation.add(angleFixed);
                     break;
-                case Sensor.TYPE_GYROSCOPE:
-                    float[] gyroValuesCopy = event.values.clone();
-                    gyroValues = MyUtils.filterGyroValue(gyroValuesCopy);
-                    break;
-                case Sensor.TYPE_ACCELEROMETER:
-//                    float[] accValuesCopy = event.values.clone();
-//                    double[] accCopy = new double[3];
-//                    accCopy[0] = accValuesCopy[0];
-//                    accCopy[1] = accValuesCopy[1];
-//                    accCopy[2] = accValuesCopy[2];
-//                    accValues = MyUtils.filterAccValues(accCopy,accValueList);
-                    break;
+//                case Sensor.TYPE_GYROSCOPE:
+//                    float[] gyroValuesCopy = event.values.clone();
+//                    gyroValues = MyUtils.filterGyroValue(gyroValuesCopy);
+//                    break;
+//                case Sensor.TYPE_ACCELEROMETER:
+////                    float[] accValuesCopy = event.values.clone();
+////                    double[] accCopy = new double[3];
+////                    accCopy[0] = accValuesCopy[0];
+////                    accCopy[1] = accValuesCopy[1];
+////                    accCopy[2] = accValuesCopy[2];
+////                    accValues = MyUtils.filterAccValues(accCopy,accValueList);
+//                    break;
                 case Sensor.TYPE_STEP_DETECTOR:
+                    double staDev = MyUtils.getStaDev(listOfOrientation,MyUtils.getAvg(listOfOrientation),"not sure");
                     double[] location = MyUtils.makeOneStepProcess(listOfOrientation, listOfTime);
+                    double staDev1 = location[2];
                     webView.loadUrl(setInsetJS(location[0] + "", location[1] + "","circle_point"));
-                    String need1 = location[0] + "\n" + location[1] + "\n";
+//                    String need1 = location[0] + "\n" + location[1] + "\n";
+                    String need1 = staDev + "\n" + staDev1;
                     mTextAcc.setText(need1);
                     break;
             }
@@ -182,10 +187,11 @@ public class ShowMapActivityFragment extends Fragment implements Cloneable {
                         List<Double> rssiValueFilterd = MyUtils.LogarNormalDistribution(mAllRssi.get(remoteMAC), RSSI_LIMIT);  //获取滤波后的信号强度表
                         mRssiFilterd.put(remoteMAC, MyUtils.getAvg(rssiValueFilterd));   //更新MAC地址对应信号强度的map
                         if (mRssiFilterd.size() > 2) {
+
                             List<String> listSortedNode = MyUtils.sortNodeBasedOnRssi(mRssiFilterd, BLE_CHOOSED_NUM);     //得到按距离排序的蓝牙节点的列表
-//                            String locationNearest = listSortedNode.get(0);
                             locationListOfNearest.add(0,listSortedNode.get(0));    //更新每次获得距离最近节点的储存表
-                            String locationBasedOnMajority = MyUtils.filterLocation(locationListOfNearest, LOCATION_NUM_LIMIT);    //由多数法选出可能的点
+                            String locationBasedOnMajority = locationListOfNearest.get(0);
+//                            String locationBasedOnMajority = MyUtils.filterLocation(locationListOfNearest, LOCATION_NUM_LIMIT);    //由多数法选出可能的点
 //                            Double[] locationNearest = getNearestNode(listSortedNode, bleNodeLoc);   //定位为最近的节点的位置。
 //                            location = getMassCenterLocation(listSortedNode, bleNodeLoc);   //通过质心定位得到位置
                             if(conutForInitialize == 1) {     //判断是否为第一次进入函数
@@ -201,8 +207,9 @@ public class ShowMapActivityFragment extends Fragment implements Cloneable {
                                 timeLast = currentMillisecond;
                                 conutForInitialize = 1;
                             }
+                            String need = bleNodeLoc.get(locationLast)[0] + "\n" + bleNodeLoc.get(locationLast)[1];
+//                            mTextGyro.setText(need);
 //                            webView.loadUrl(setInsetJS(bleNodeLoc.get(locationLast)[0] + "", bleNodeLoc.get(locationLast)[1] + "","circle_point"));
-//                            webView.loadUrl(setInsetJS(bleNodeLoc.get(locationNearest)[0] + "", bleNodeLoc.get(locationNearest)[1] + "","circle_point"));
 //                            webView.loadUrl(setInsetJS(bleNodeLoc.get(locationBasedOnMajority)[0] + "", bleNodeLoc.get(locationBasedOnMajority)[1] + "","circle_point2"));
                         }
                     }
@@ -211,28 +218,40 @@ public class ShowMapActivityFragment extends Fragment implements Cloneable {
         }
     };
 
-    //// TODO: 2017/5/7 如果计步器好使的话，加入：每次进入函数，将最后确定的位置与此时的时间加入到列表中
+    //// TODO: 2017/5/7 测试吧
+    // TODO: 2017/5/9 增加上慢速移动坐标点的代码 
     //当获得角度大于零时，传入的新坐标点是对的；小于零也包括传感器提示没有行动时，返回传入的旧坐标点
+    //超过2秒没有发生步伐，认为是静止，采用蓝牙的结果；多于4秒没有发生变化采用最后一次蓝牙的结果，以避免无尽的跳来跳去。
     public String getSensorConfirm(String locationLast, String locationOnMajority, long timeLast,long currentMillisecond, Map<String, double[]> bleNodeLoc, ArrayList<Long> listOfTime){
-        double[] locationOld = bleNodeLoc.get(locationLast);
-        double[] locationNew = bleNodeLoc.get(locationOnMajority);
-        double[] vectorBasedOnBluetooth = {locationNew[0]-locationOld[0], locationNew[1]-locationOld[1]};
-        double[] locationOldSensor = MyUtils.searchTimeList(timeLast, listOfTime, "cutFromOldTime");
-        double[] locationNewSensor = MyUtils.searchTimeList(currentMillisecond, listOfTime,"dontCut");
-        double[] vectorBasedOnSensor = {locationNewSensor[0]-locationOldSensor[0],locationNewSensor[1]-locationOldSensor[1]};
+        long sensorLatestUpdateTime = listOfTime.get(0);    //时间列表最后更新的时间
+        long timeDiff = currentMillisecond - sensorLatestUpdateTime;
+        String hahah = timeDiff + "\n";
+//        mTextAcc.setText(hahah);
+        if(timeDiff < 2000) {
+            double[] locationOld = bleNodeLoc.get(locationLast);
+            double[] locationNew = bleNodeLoc.get(locationOnMajority);
+            double[] vectorBasedOnBluetooth = {locationNew[0] - locationOld[0], locationNew[1] - locationOld[1]};
+            double[] locationOldSensor = MyUtils.searchTimeList(timeLast, listOfTime, "cutFromOldTime");
+            double[] locationNewSensor = MyUtils.searchTimeList(currentMillisecond, listOfTime, "dontCut");
+            double[] vectorBasedOnSensor = {locationNewSensor[0] - locationOldSensor[0], locationNewSensor[1] - locationOldSensor[1]};
 
-        double angle = MyUtils.getVectorAngle(vectorBasedOnBluetooth,vectorBasedOnSensor);
-        String toReturn;
-        if(angle > 0){
-            toReturn =  locationOnMajority;
-        }else {
-            toReturn = locationLast;
-        }
-        String locBasedOnBluetooth = locationOld[0] + "," + locationOld[1] + "  " + locationNew[0] + "," + locationNew[1] + "\n";
-        String locBasedOnSensor = locationOldSensor[0] + "," + locationOldSensor[1] + "  " + locationNewSensor[0] + "," + locationNewSensor[1] + "\n";
-
+            double angle = MyUtils.getVectorAngle(vectorBasedOnBluetooth, vectorBasedOnSensor);
+            String toReturn;
+            if (angle > 0) {
+                toReturn = locationOnMajority;
+            } else {
+                toReturn = locationLast;
+            }
+            String locBasedOnBluetooth = locationOld[0] + "," + locationOld[1] + "  " + locationNew[0] + "," + locationNew[1] + "\n";
+            String locBasedOnSensor = locationOldSensor[0] + "," + locationOldSensor[1] + "  " + locationNewSensor[0] + "," + locationNewSensor[1] + "\n";
 //        stringBuffer.append()
-        return toReturn;
+
+            return toReturn;
+        }else if(timeDiff > 4000){
+            return locationLast;
+        }else{
+            return locationOnMajority;
+        }
     }
 
 
@@ -248,12 +267,12 @@ public class ShowMapActivityFragment extends Fragment implements Cloneable {
     private void initSensor() {
         sensorManager = (SensorManager) getActivity().getSystemService(Context.SENSOR_SERVICE);
         Sensor rotVectorSensor = sensorManager.getDefaultSensor(Sensor.TYPE_ROTATION_VECTOR);
-        Sensor accSensor = sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER);
-        Sensor gyroSensor = sensorManager.getDefaultSensor(Sensor.TYPE_GYROSCOPE);
+//        Sensor accSensor = sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER);
+//        Sensor gyroSensor = sensorManager.getDefaultSensor(Sensor.TYPE_GYROSCOPE);
         Sensor stepSensor = sensorManager.getDefaultSensor(Sensor.TYPE_STEP_DETECTOR);
         sensorManager.registerListener(listener, rotVectorSensor, SensorManager.SENSOR_DELAY_GAME);
-        sensorManager.registerListener(listener, accSensor, SensorManager.SENSOR_DELAY_GAME);
-        sensorManager.registerListener(listener, gyroSensor, SensorManager.SENSOR_DELAY_GAME);
+//        sensorManager.registerListener(listener, accSensor, SensorManager.SENSOR_DELAY_GAME);
+//        sensorManager.registerListener(listener, gyroSensor, SensorManager.SENSOR_DELAY_GAME);
         sensorManager.registerListener(listener,stepSensor,SensorManager.SENSOR_DELAY_GAME);
         listOfTime.add(Calendar.getInstance().getTimeInMillis());    //初始化时给时间列表填充第一个元素
     }
@@ -313,9 +332,18 @@ public class ShowMapActivityFragment extends Fragment implements Cloneable {
 
     @Override
     public void onPause() {
-        sensorManager.unregisterListener(listener);
+//        sensorManager.unregisterListener(listener);
         super.onPause();
     }
+
+    @Override
+    public void onResume() {
+//        sensorManager.registerListener(listener, rotVectorSensor, SensorManager.SENSOR_DELAY_GAME);
+//        sensorManager.registerListener(listener,stepSensor,SensorManager.SENSOR_DELAY_GAME);
+        super.onResume();
+
+    }
+
     @Override
     public void onDestroy() {
         super.onDestroy();
