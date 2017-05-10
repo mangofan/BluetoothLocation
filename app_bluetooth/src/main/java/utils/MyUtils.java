@@ -46,24 +46,28 @@ public class MyUtils {
         }
     }
 
-    // TODO: 2017/5/9 朝南走的时候仍然不好，检查并修复
     //每步产生时记录位置，记录时间，为了以后的查询中使用
     public static double[] makeOneStepProcess(ArrayList<Double> listOfOrientation, ArrayList<Long>listOfTime){
-        long currentTime = Calendar.getInstance().getTimeInMillis();
-        double staDevOOrientation = getStaDev(listOfOrientation,getAvg(listOfOrientation),"not sure");
-        if(staDevOOrientation > 1.5) {       //方差过大时，认为方向应该为朝向南，处于正负180度之间造成的平均值出现误差，处理方法是将所有负数值加2π。
-            positiveOrientationList(listOfOrientation);
+        if(listOfOrientation.size() == 0)
+            return new double[]{Sx,Sy};
+        else {
+            long currentTime = Calendar.getInstance().getTimeInMillis();
+            double staDevOOrientation = getStaDev(listOfOrientation, getAvg(listOfOrientation), "not sure");
+            if (staDevOOrientation > 1.5) {       //方差过大时，认为方向应该为朝向南，处于正负180度之间造成的平均值出现误差，处理方法是将所有负数值加2π。
+                positiveOrientationList(listOfOrientation);
+            }
+            double avgOrientation = getAvg(listOfOrientation);
+            double staDev = getStaDev(listOfOrientation, avgOrientation, "not sure");
+            double stepLength = 0.6;
+            Sx += -Math.sin(avgOrientation) * stepLength;   //原坐标轴以东为正，现在坐标轴以西为正
+            Sy += Math.cos(avgOrientation) * stepLength;
+            int length = listOfOrientation.size();
+            double[] location = {Sx, Sy, avgOrientation, staDev, length};
+            locationBasedOnSensor.put(currentTime, location);
+            listOfTime.add(0, currentTime);
+            listOfOrientation.clear();
+            return location;
         }
-        double avgOrientation = getAvg(listOfOrientation);
-        double staDev = getStaDev(listOfOrientation, avgOrientation,"not sure");
-        double stepLength = 0.6;
-        Sx += -Math.sin(avgOrientation) * stepLength;   //原坐标轴以东为正，现在坐标轴以西为正
-        Sy += Math.cos(avgOrientation) * stepLength;
-        listOfOrientation.clear();
-        double[] location = {Sx,Sy, staDev};
-        locationBasedOnSensor.put(currentTime, location);
-        listOfTime.add(0,currentTime);
-        return location;
     }
 
     //求向量夹角的cos

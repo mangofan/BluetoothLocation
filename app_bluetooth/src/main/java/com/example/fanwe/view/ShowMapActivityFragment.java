@@ -11,9 +11,11 @@ import android.hardware.Sensor;
 import android.hardware.SensorEvent;
 import android.hardware.SensorEventListener;
 import android.hardware.SensorManager;
+import android.nfc.Tag;
 import android.os.Bundle;
 import android.support.v4.app.Fragment;
 import android.support.v4.util.LongSparseArray;
+import android.util.Log;
 import android.util.SparseArray;
 import android.view.LayoutInflater;
 import android.view.View;
@@ -72,6 +74,7 @@ public class ShowMapActivityFragment extends Fragment implements Cloneable {
     //传感器有关的参数
     ArrayList<String> A = new ArrayList<>();
     float[] rotationMatrix = new float[9];
+    
     ArrayList<Long> listOfTime = new ArrayList<>();
     ArrayList<Double> listOfOrientation = new ArrayList<>();
     int TIME0 = 200, LOCATION_NUM_LIMIT = 25, conutForInitialize = 0;
@@ -93,8 +96,8 @@ public class ShowMapActivityFragment extends Fragment implements Cloneable {
                     float[] orientation = new float[3];
                     SensorManager.getOrientation(rotationMatrix, orientation);
                     double angleFixed  = MyUtils.getAngleFixed(orientation[0], angleBias);
-                    String need = angleFixed + "\n" + orientation[0];
-                    mTextGyro.setText(need);
+                    String need = angleFixed + "\n";
+//                    mTextAcc.setText(need);
                     listOfOrientation.add(angleFixed);
                     break;
 //                case Sensor.TYPE_GYROSCOPE:
@@ -110,13 +113,14 @@ public class ShowMapActivityFragment extends Fragment implements Cloneable {
 ////                    accValues = MyUtils.filterAccValues(accCopy,accValueList);
 //                    break;
                 case Sensor.TYPE_STEP_DETECTOR:
+                    int orientationLength = listOfOrientation.size();
                     double staDev = MyUtils.getStaDev(listOfOrientation,MyUtils.getAvg(listOfOrientation),"not sure");
                     double[] location = MyUtils.makeOneStepProcess(listOfOrientation, listOfTime);
-                    double staDev1 = location[2];
-                    webView.loadUrl(setInsetJS(location[0] + "", location[1] + "","circle_point"));
-//                    String need1 = location[0] + "\n" + location[1] + "\n";
-                    String need1 = staDev + "\n" + staDev1;
-                    mTextAcc.setText(need1);
+//                    webView.loadUrl(setInsetJS(location[0] + "", location[1] + "","circle_point"));
+//                    String need1 = staDev + "\n" + location[2] + "\n" + location[0] + "  " + location[1]+ "\n";
+//                    stringBuffer.append(need1);
+                    String need1 = orientationLength + "\n";
+//                    mTextGyro.setText(need1);
                     break;
             }
         }
@@ -207,10 +211,10 @@ public class ShowMapActivityFragment extends Fragment implements Cloneable {
                                 timeLast = currentMillisecond;
                                 conutForInitialize = 1;
                             }
-                            String need = bleNodeLoc.get(locationLast)[0] + "\n" + bleNodeLoc.get(locationLast)[1];
-//                            mTextGyro.setText(need);
-//                            webView.loadUrl(setInsetJS(bleNodeLoc.get(locationLast)[0] + "", bleNodeLoc.get(locationLast)[1] + "","circle_point"));
-//                            webView.loadUrl(setInsetJS(bleNodeLoc.get(locationBasedOnMajority)[0] + "", bleNodeLoc.get(locationBasedOnMajority)[1] + "","circle_point2"));
+                            String need = bleNodeLoc.get(locationBasedOnMajority)[0] + "\n" + bleNodeLoc.get(locationBasedOnMajority)[1];
+                            mTextGyro.setText(need);
+                            webView.loadUrl(setInsetJS(bleNodeLoc.get(locationLast)[0] + "", bleNodeLoc.get(locationLast)[1] + "","circle_point"));
+                            webView.loadUrl(setInsetJS(bleNodeLoc.get(locationBasedOnMajority)[0] + "", bleNodeLoc.get(locationBasedOnMajority)[1] + "","circle_point2"));
                         }
                     }
                 }
@@ -225,8 +229,6 @@ public class ShowMapActivityFragment extends Fragment implements Cloneable {
     public String getSensorConfirm(String locationLast, String locationOnMajority, long timeLast,long currentMillisecond, Map<String, double[]> bleNodeLoc, ArrayList<Long> listOfTime){
         long sensorLatestUpdateTime = listOfTime.get(0);    //时间列表最后更新的时间
         long timeDiff = currentMillisecond - sensorLatestUpdateTime;
-        String hahah = timeDiff + "\n";
-//        mTextAcc.setText(hahah);
         if(timeDiff < 2000) {
             double[] locationOld = bleNodeLoc.get(locationLast);
             double[] locationNew = bleNodeLoc.get(locationOnMajority);
@@ -346,7 +348,6 @@ public class ShowMapActivityFragment extends Fragment implements Cloneable {
 
     @Override
     public void onDestroy() {
-        super.onDestroy();
         Thread thread = new Thread(new Runnable() {
             @Override
             public void run() {
@@ -356,7 +357,7 @@ public class ShowMapActivityFragment extends Fragment implements Cloneable {
         thread.start();
         EventBus.getDefault().unregister(this);
         cancelTask();
-
+        super.onDestroy();
     }
     ScheduledFuture<?> future;
     @Subscribe(threadMode = ThreadMode.MAIN)
