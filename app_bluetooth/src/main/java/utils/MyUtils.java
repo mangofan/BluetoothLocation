@@ -21,7 +21,7 @@ import static utils.Quaternion.getQuaternionMulit;
 
 public class MyUtils {
 
-    private static double Sx = 14f, Sy = 0f;
+    private static double Sx = 14.0, Sy = 0.0;
     private static Double[] accBias = {0.0,0.0,0.0}, accStaDev =  {0.0,0.0,0.0};
     private static LongSparseArray<double[]> locationBasedOnSensor = new LongSparseArray<>();
 
@@ -98,11 +98,10 @@ public class MyUtils {
                 break;
             }
         }
-        long timeQuery = listOfTime.get(j);
-        long sensorLatestUpdateTime = listOfTime.get(0);    //时间列表最后更新的时间
+        long timeQuery = listOfTime.get(j);   //获得查找到的时间
 
-        double[] hahh = {0.0,0.0};     //初始进入时，有可能传感器定位还没有值，此时给定值为0,0
-        double[] testReturn = locationBasedOnSensor.get(timeQuery, hahh);
+        double[] hahh = {14.0,0.0};     //初始进入时，有可能传感器定位还没有值，此时给定值为0,0
+        double[] testReturn = locationBasedOnSensor.get(timeQuery, hahh);   //如果查找的时间不存在值，则返回（0.0,0.0），认为是初始进入时没有值时的情况
         String mark = "cutFromOldTime";                  //正常情况下，测试是否为对旧时间的query，如果是的话对list进行维持长度的操作。
         if (howToDealWithTimeList.equals(mark) && (listOfTime.size() - 1 != j)) {
             for (int k = listOfTime.size() - 1; k > j; k--) {
@@ -205,10 +204,10 @@ public class MyUtils {
 
 
     //根据RSSI强度，对MAC地址排序
-    public static ArrayList<String> sortNodeBasedOnRssi(Map<String, Double> mRssiFilterd, int BLE_CHOOSED_NUM) {
-        List<Map.Entry<String, Double>> infoIds =
-                new ArrayList<>(mRssiFilterd.entrySet());
-        ArrayList<String> list = new ArrayList<>();
+    public static SparseArray<ArrayList<String>> sortNodeBasedOnRssi(Map<String, Double> mRssiFilterd, int BLE_CHOOSED_NUM) {
+        List<Map.Entry<String, Double>> infoIds = new ArrayList<>(mRssiFilterd.entrySet());
+        ArrayList<String> listOfMac = new ArrayList<>();
+        ArrayList<String> listOfRssi = new ArrayList<>();
         int limit = BLE_CHOOSED_NUM < mRssiFilterd.size() ? BLE_CHOOSED_NUM : mRssiFilterd.size();
 
         Collections.sort(infoIds, new Comparator<Map.Entry<String, Double>>() {        //排序
@@ -217,10 +216,14 @@ public class MyUtils {
             }
         });
         for (int i = 0; i < limit; i++) {        //排序完,取前limit个
-            String id = infoIds.get(i).toString();
-            list.add(id.split("=")[0]);   //string.split后变为字符串数组。
+            String[] id = infoIds.get(i).toString().split("=");   //string.split后变为字符串数组。
+            listOfMac.add(id[0]);
+            listOfRssi.add(id[1]);
         }
-        return list;     //排序好的MAC地址的列表
+        SparseArray<ArrayList<String>> toReturn = new SparseArray<>();
+        toReturn.put(1, listOfMac);
+        toReturn.put(2, listOfRssi);
+        return toReturn;     //排序好的MAC地址的列表
     }
 
     //求ArrayLIst均值
@@ -252,30 +255,32 @@ public class MyUtils {
     }
 
     //对数正态滤波
-    public static List<Double> LogarNormalDistribution(List<Double> mAllRssilist, int RSSI_LIMIT) {
-        ArrayList<Double> value = cutList(mAllRssilist, RSSI_LIMIT);
+    public static double LogarNormalDistribution(ArrayList<Double> mAllRssilist, int RSSI_LIMIT) {
+        cutListAndDelete(mAllRssilist, RSSI_LIMIT);  //按照limit切割子list，并删除切割后剩余的值
 
         Double avg, staDev, proLowLim, proHighLim, pdfAltered;  //rssiValue作为一个中间变量在多个计算过程中间使用
 
-        ArrayList<Double> logarNormalList = GetLogarNormalList(value);   //转换成对数形式
+        ArrayList<Double> logarNormalList = GetLogarNormalList(mAllRssilist);   //转换成对数形式
         avg = getAvg(logarNormalList);   //求均值
         staDev = getStaDev(logarNormalList, avg, "logarNormal");  //求标准差
 
         if (staDev != 0) {
             proHighLim = Math.exp(0.5 * Math.pow(staDev, 2) - avg) / (staDev * Math.sqrt(2 * Math.PI));
             proLowLim = proHighLim * 0.6;
+            double denominatorOfExponent = 2 * Math.pow(staDev, 2);  //提前计算exponent的分母，因为历次分母相同，避免重复计算
+            double partDenominatorOfPdfAltered = staDev * Math.sqrt(2 * Math.PI);   //提前计算pdfAltered的一部分分母，也是为了避免重复计算
             for (int i = 0; i < logarNormalList.size(); i++) {          //去掉value中的低概率RSSI
-                Double exponent = -Math.pow(logarNormalList.get(i) - avg, 2) / (2 * Math.pow(staDev, 2));
-                pdfAltered = Math.exp(exponent) / ((0 - value.get(i)) * staDev * Math.sqrt(2 * Math.PI));
+                double exponent = -Math.pow(logarNormalList.get(i) - avg, 2) / denominatorOfExponent;
+                pdfAltered = Math.exp(exponent) / ((0 - mAllRssilist.get(i)) * partDenominatorOfPdfAltered);
                 if (pdfAltered < proLowLim || pdfAltered > proHighLim) {
                     logarNormalList.remove(i);                              //删除不在高概率区域内的数据
-                    value.remove(i);            //未进行对数运算的原始数据中也进行对应的删除操作
+                    mAllRssilist.remove(i);            //未进行对数运算的原始数据中也进行对应的删除操作
                     i -= 1;
                 }
             }
         }
 
-        return value;
+        return getAvg(mAllRssilist);
     }
 
     //对ArrayList每个值取对数，以应用于对数正态运算的函数
@@ -285,6 +290,15 @@ public class MyUtils {
             list1.add(Math.log(0 - list.get(i)));
         }
         return list1;
+    }
+
+    //切割子list，并且去掉之后需要的值之后的值
+    private static <T> void cutListAndDelete(List<T> list, int limit){
+        if(list.size() > limit){
+            for(int i = list.size()-1; i > limit-1; i--){
+                list.remove(i);
+            }
+        }
     }
 
     //切割子list

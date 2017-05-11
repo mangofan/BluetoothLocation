@@ -50,14 +50,15 @@ import static com.example.fanwe.bluetoothlocation.R.id.textView1;
 import static com.example.fanwe.bluetoothlocation.R.id.textView2;
 import static com.example.fanwe.bluetoothlocation.R.id.time;
 import static com.example.fanwe.bluetoothlocation.R.id.webview;
-
+// TODO: 2017/5/9 增加上慢速移动坐标点的代码
+// TODO: 2017/5/11 发热量大，减少计算量
 public class ShowMapActivityFragment extends Fragment implements Cloneable {
 
     float angleBias = 19f;  //建筑物方向与正北向的夹角，建筑物方向是正北向的的北偏东多少度。
     private static final int ENABLE_BLUETOOTH = 1;
     WebView webView;
     TextView mTextAcc, mTextGyro;
-    int RSSI_LIMIT = 5, BLE_CHOOSED_NUM = 3;
+    int RSSI_LIMIT = 5, BLE_CHOOSED_NUM = 4;
     SensorManager sensorManager;
 
     //蓝牙有关的参数
@@ -65,7 +66,7 @@ public class ShowMapActivityFragment extends Fragment implements Cloneable {
     long lastTime = 0;
     String locationLast;
     StringBuffer stringBuffer = new StringBuffer();
-    Map<String, List<Double>> mAllRssi = new HashMap<>();    //储存RSSI的MAP
+    Map<String, ArrayList<Double>> mAllRssi = new HashMap<>();    //储存RSSI的MAP
     Map<String, Double> mRssiFilterd = new HashMap<>();     //过滤后的RSSI的Map
     Map<String, double[]> bleNodeLoc = new HashMap<>();    //固定节点的位置Map
     BluetoothAdapter bluetoothAdapter = BluetoothAdapter.getDefaultAdapter();
@@ -96,8 +97,6 @@ public class ShowMapActivityFragment extends Fragment implements Cloneable {
                     float[] orientation = new float[3];
                     SensorManager.getOrientation(rotationMatrix, orientation);
                     double angleFixed  = MyUtils.getAngleFixed(orientation[0], angleBias);
-                    String need = angleFixed + "\n";
-//                    mTextAcc.setText(need);
                     listOfOrientation.add(angleFixed);
                     break;
 //                case Sensor.TYPE_GYROSCOPE:
@@ -113,14 +112,7 @@ public class ShowMapActivityFragment extends Fragment implements Cloneable {
 ////                    accValues = MyUtils.filterAccValues(accCopy,accValueList);
 //                    break;
                 case Sensor.TYPE_STEP_DETECTOR:
-                    int orientationLength = listOfOrientation.size();
-                    double staDev = MyUtils.getStaDev(listOfOrientation,MyUtils.getAvg(listOfOrientation),"not sure");
                     double[] location = MyUtils.makeOneStepProcess(listOfOrientation, listOfTime);
-//                    webView.loadUrl(setInsetJS(location[0] + "", location[1] + "","circle_point"));
-//                    String need1 = staDev + "\n" + location[2] + "\n" + location[0] + "  " + location[1]+ "\n";
-//                    stringBuffer.append(need1);
-                    String need1 = orientationLength + "\n";
-//                    mTextGyro.setText(need1);
                     break;
             }
         }
@@ -170,6 +162,7 @@ public class ShowMapActivityFragment extends Fragment implements Cloneable {
         @Override
         public void onReceive(Context context, Intent intent) {
             Calendar calendar = Calendar.getInstance();
+            Log.d("hh","receive");
             long currentMillisecond = calendar.getTimeInMillis();
             BluetoothDevice remoteDevice = intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE);
             String remoteMAC;
@@ -180,41 +173,48 @@ public class ShowMapActivityFragment extends Fragment implements Cloneable {
                     rssi = intent.getExtras().getShort(BluetoothDevice.EXTRA_RSSI);
                     if (!dFinished.equals(intent.getAction())) {   //接收到的事件不是结束时
                         if (mAllRssi.containsKey(remoteMAC)) {    //判断之前是否接收过相同蓝牙节点的广播，分别处理
-                            List<Double> list1 = mAllRssi.get(remoteMAC);
-                            list1.add(0, (double) rssi);
-                            mAllRssi.put(remoteMAC, list1);
+                            ArrayList<Double> list1 = mAllRssi.get(remoteMAC);
+                            list1.add(0, (double) rssi);   //因为是引用，所以直接修改的是原对象本身
                         } else {
                             ArrayList<Double> list = new ArrayList<>();
                             list.add((double) rssi);   //如果这个MAC地址没有出现过，建立list存储历次rssi
                             mAllRssi.put(remoteMAC, list);
                         }
-                        List<Double> rssiValueFilterd = MyUtils.LogarNormalDistribution(mAllRssi.get(remoteMAC), RSSI_LIMIT);  //获取滤波后的信号强度表
-                        mRssiFilterd.put(remoteMAC, MyUtils.getAvg(rssiValueFilterd));   //更新MAC地址对应信号强度的map
+                        String need = remoteMAC + " " + rssi + "\n";
+                        Log.d("hh", need);
+                        double getAvgOfFilterdRssiValueList = MyUtils.LogarNormalDistribution(mAllRssi.get(remoteMAC), RSSI_LIMIT);  //获取滤波后的信号强度表和强度平均值
+                        mRssiFilterd.put(remoteMAC, getAvgOfFilterdRssiValueList);   //更新MAC地址对应信号强度的map
                         if (mRssiFilterd.size() > 2) {
+//                            List<String> listSortedNode = MyUtils.sortNodeBasedOnRssi(mRssiFilterd, BLE_CHOOSED_NUM);     //得到按距离排序的蓝牙节点的列表
+//                            locationListOfNearest.add(0,listSortedNode.get(0));    //更新每次获得距离最近节点的储存表
+//                            String locationBasedOnMajority = locationListOfNearest.get(0);
+//                            webView.loadUrl(setInsetJS(bleNodeLoc.get(locationBasedOnMajority)[0] + "", bleNodeLoc.get(locationBasedOnMajority)[1] + "","circle_point2"));
+////                            String locationBasedOnMajority = MyUtils.filterLocation(locationListOfNearest, LOCATION_NUM_LIMIT);    //由多数法选出可能的点
+////                            Double[] locationNearest = getNearestNode(listSortedNode, bleNodeLoc);   //定位为最近的节点的位置。
+////                            location = getMassCenterLocation(listSortedNode, bleNodeLoc);   //通过质心定位得到位置
+//                            if(conutForInitialize == 1) {     //判断是否为第一次进入函数
+//                                if (!locationBasedOnMajority.equals(locationLast)) {    //当新出现的节点与上一个定位点不相同时
+//                                    String locationTrue = getSensorConfirm(locationLast, locationBasedOnMajority, timeLast, currentMillisecond, bleNodeLoc, listOfTime);
+//                                    if(!locationTrue.equals(locationLast)){    //仅当定位点发生变化时，才修改记录的定位点和定位时间
+//                                        timeLast = currentMillisecond;
+//                                        locationLast = locationTrue;
+//                                    }
+//                                }
+//                            }else{
+//                                locationLast = locationListOfNearest.get(0);
+//                                timeLast = currentMillisecond;
+//                                conutForInitialize = 1;
+//                            }
+                            SparseArray<ArrayList<String>> test = MyUtils.sortNodeBasedOnRssi(mRssiFilterd, BLE_CHOOSED_NUM);
+                            ArrayList<String> listOfMac = test.get(1);
+                            ArrayList<String> listOfRssi = test.get(2);
 
-                            List<String> listSortedNode = MyUtils.sortNodeBasedOnRssi(mRssiFilterd, BLE_CHOOSED_NUM);     //得到按距离排序的蓝牙节点的列表
-                            locationListOfNearest.add(0,listSortedNode.get(0));    //更新每次获得距离最近节点的储存表
-                            String locationBasedOnMajority = locationListOfNearest.get(0);
-//                            String locationBasedOnMajority = MyUtils.filterLocation(locationListOfNearest, LOCATION_NUM_LIMIT);    //由多数法选出可能的点
-//                            Double[] locationNearest = getNearestNode(listSortedNode, bleNodeLoc);   //定位为最近的节点的位置。
-//                            location = getMassCenterLocation(listSortedNode, bleNodeLoc);   //通过质心定位得到位置
-                            if(conutForInitialize == 1) {     //判断是否为第一次进入函数
-                                if (!locationBasedOnMajority.equals(locationLast)) {    //当新出现的节点与上一个定位点不相同时
-                                    String locationTrue = getSensorConfirm(locationLast, locationBasedOnMajority, timeLast, currentMillisecond, bleNodeLoc, listOfTime);
-                                    if(!locationTrue.equals(locationLast)){    //仅当定位点发生变化时，才修改记录的定位点和定位时间
-                                        timeLast = currentMillisecond;
-                                        locationLast = locationTrue;
-                                    }
-                                }
-                            }else{
-                                locationLast = locationListOfNearest.get(0);
-                                timeLast = currentMillisecond;
-                                conutForInitialize = 1;
+                            for(int i = 0; i < listOfMac.size(); i++){
+                                need += listOfMac.get(i) + " " + listOfRssi.get(i) + "\n";
                             }
-                            String need = bleNodeLoc.get(locationBasedOnMajority)[0] + "\n" + bleNodeLoc.get(locationBasedOnMajority)[1];
+//                            String need = bleNodeLoc.get(locationBasedOnMajority)[0] + "\n" + bleNodeLoc.get(locationBasedOnMajority)[1];
                             mTextGyro.setText(need);
-                            webView.loadUrl(setInsetJS(bleNodeLoc.get(locationLast)[0] + "", bleNodeLoc.get(locationLast)[1] + "","circle_point"));
-                            webView.loadUrl(setInsetJS(bleNodeLoc.get(locationBasedOnMajority)[0] + "", bleNodeLoc.get(locationBasedOnMajority)[1] + "","circle_point2"));
+//                            webView.loadUrl(setInsetJS(bleNodeLoc.get(locationLast)[0] + "", bleNodeLoc.get(locationLast)[1] + "","circle_point"));
                         }
                     }
                 }
@@ -222,8 +222,8 @@ public class ShowMapActivityFragment extends Fragment implements Cloneable {
         }
     };
 
-    //// TODO: 2017/5/7 测试吧
-    // TODO: 2017/5/9 增加上慢速移动坐标点的代码 
+    //// TODO: 2017/5/11 测试老师的想法，测试在两个节点中间，强度差？
+
     //当获得角度大于零时，传入的新坐标点是对的；小于零也包括传感器提示没有行动时，返回传入的旧坐标点
     //超过2秒没有发生步伐，认为是静止，采用蓝牙的结果；多于4秒没有发生变化采用最后一次蓝牙的结果，以避免无尽的跳来跳去。
     public String getSensorConfirm(String locationLast, String locationOnMajority, long timeLast,long currentMillisecond, Map<String, double[]> bleNodeLoc, ArrayList<Long> listOfTime){
@@ -335,6 +335,7 @@ public class ShowMapActivityFragment extends Fragment implements Cloneable {
     @Override
     public void onPause() {
 //        sensorManager.unregisterListener(listener);
+
         super.onPause();
     }
 
