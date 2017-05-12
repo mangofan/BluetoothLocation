@@ -25,6 +25,34 @@ public class MyUtils {
     private static Double[] accBias = {0.0,0.0,0.0}, accStaDev =  {0.0,0.0,0.0};
     private static LongSparseArray<double[]> locationBasedOnSensor = new LongSparseArray<>();
 
+
+    //当获得角度大于零时，传入的新坐标点是对的；小于零也包括传感器提示没有行动时，返回传入的旧坐标点
+    //超过2秒没有发生步伐，认为是静止，传感器数据不再使用，直接采用蓝牙的结果；多于4秒没有发生变化，采用最后一次蓝牙的结果，以避免无尽的跳来跳去;少于2秒时，仍使用传感器结果和蓝牙进行比对确定位置。
+    public static double[] getSensorConfirm(double[] locationOnBluetoothOld, double[] locationOnBluetoothNew, long timeLast,long currentMillisecond, ArrayList<Long> listOfTime){
+        long sensorLatestUpdateTime = listOfTime.get(0);    //时间列表最后更新的时间
+        long timeDiff = currentMillisecond - sensorLatestUpdateTime;
+        if(timeDiff < 2000) {
+            double[] vectorBasedOnBluetooth = {locationOnBluetoothNew[0] - locationOnBluetoothOld[0], locationOnBluetoothNew[1] - locationOnBluetoothOld[1]};
+            double[] locationOldSensor = MyUtils.searchTimeList(timeLast, listOfTime, "cutFromOldTime");
+            double[] locationNewSensor = MyUtils.searchTimeList(currentMillisecond, listOfTime, "dontCut");
+            double[] vectorBasedOnSensor = {locationNewSensor[0] - locationOldSensor[0], locationNewSensor[1] - locationOldSensor[1]};
+
+            double angle = MyUtils.getVectorAngle(vectorBasedOnBluetooth, vectorBasedOnSensor);
+            double[] toReturn;
+            if (angle > 0) {
+                toReturn = locationOnBluetoothNew;
+            } else {
+                toReturn = locationOnBluetoothOld;
+            }
+            return toReturn;
+
+        }else if(timeDiff > 4000){
+            return locationOnBluetoothOld;
+        }else{
+            return locationOnBluetoothNew;
+        }
+    }
+
     public static double getAngleFixed(float angle, double angleBiased){
         double angleBiasedInR = angleBiased * Math.PI / 180;
         double angleFixed = angle - angleBiasedInR;
@@ -100,8 +128,8 @@ public class MyUtils {
         }
         long timeQuery = listOfTime.get(j);   //获得查找到的时间
 
-        double[] hahh = {14.0,0.0};     //初始进入时，有可能传感器定位还没有值，此时给定值为0,0
-        double[] testReturn = locationBasedOnSensor.get(timeQuery, hahh);   //如果查找的时间不存在值，则返回（0.0,0.0），认为是初始进入时没有值时的情况
+        double[] hahh = {14.0,0.0};     //初始进入时，有可能传感器定位还没有值，此时给定值为14.0,0.0
+        double[] testReturn = locationBasedOnSensor.get(timeQuery, hahh);   //如果查找的时间不存在值，则返回（14.0,0.0），认为是初始进入时没有值时的情况
         String mark = "cutFromOldTime";                  //正常情况下，测试是否为对旧时间的query，如果是的话对list进行维持长度的操作。
         if (howToDealWithTimeList.equals(mark) && (listOfTime.size() - 1 != j)) {
             for (int k = listOfTime.size() - 1; k > j; k--) {
@@ -263,24 +291,25 @@ public class MyUtils {
         ArrayList<Double> logarNormalList = GetLogarNormalList(mAllRssilist);   //转换成对数形式
         avg = getAvg(logarNormalList);   //求均值
         staDev = getStaDev(logarNormalList, avg, "logarNormal");  //求标准差
-
-        if (staDev != 0) {
+        ArrayList<Double> dataToGetAvg = new ArrayList<>();
+        if (staDev != 0) {    //取值的标准差不为零时，去除低概率值，再计算平均值
             proHighLim = Math.exp(0.5 * Math.pow(staDev, 2) - avg) / (staDev * Math.sqrt(2 * Math.PI));
             proLowLim = proHighLim * 0.6;
             double denominatorOfExponent = 2 * Math.pow(staDev, 2);  //提前计算exponent的分母，因为历次分母相同，避免重复计算
             double partDenominatorOfPdfAltered = staDev * Math.sqrt(2 * Math.PI);   //提前计算pdfAltered的一部分分母，也是为了避免重复计算
-            for (int i = 0; i < logarNormalList.size(); i++) {          //去掉value中的低概率RSSI
+
+            for (int i = 0; i < logarNormalList.size(); i++) {          //去掉value中的低概率RSSI，并且计算剩余的平均值。
                 double exponent = -Math.pow(logarNormalList.get(i) - avg, 2) / denominatorOfExponent;
                 pdfAltered = Math.exp(exponent) / ((0 - mAllRssilist.get(i)) * partDenominatorOfPdfAltered);
-                if (pdfAltered < proLowLim || pdfAltered > proHighLim) {
-                    logarNormalList.remove(i);                              //删除不在高概率区域内的数据
-                    mAllRssilist.remove(i);            //未进行对数运算的原始数据中也进行对应的删除操作
-                    i -= 1;
+                if (pdfAltered > proLowLim && pdfAltered < proHighLim) {   //筛选在高概率区域内的数据
+                    dataToGetAvg.add(mAllRssilist.get(i));
                 }
             }
-        }
+            return getAvg(dataToGetAvg);
+        }else             //取值的标准差为零时，直接返回平均值
+            return getAvg(mAllRssilist);
 
-        return getAvg(mAllRssilist);
+
     }
 
     //对ArrayList每个值取对数，以应用于对数正态运算的函数
@@ -302,7 +331,7 @@ public class MyUtils {
     }
 
     //切割子list
-    private static <T> ArrayList<T> cutList(List<T> list, int limit) {
+    public static <T> ArrayList<T> cutList(List<T> list, int limit) {
         int trueLimit = limit < list.size() ? limit : list.size();
         ArrayList<T> returnList = new ArrayList<>();
         for (int i = 0; i < trueLimit; i++) {
@@ -320,17 +349,7 @@ public class MyUtils {
         return location;
     }
 
-    //使用质心定位得到坐标
-    public static Double[] getMassCenterLocation(ArrayList<String> listSortedNode, Map<String, Double[]> bleNodeLoc) {
-        Double[] location = new Double[2];
-        String A = listSortedNode.get(0), B = listSortedNode.get(1), C = listSortedNode.get(2);
-        Double Ax = bleNodeLoc.get(A)[0], Ay = bleNodeLoc.get(A)[1], Bx = bleNodeLoc.get(B)[0], By = bleNodeLoc.get(B)[1], Cx = bleNodeLoc.get(C)[0], Cy = bleNodeLoc.get(C)[1];
-        location[0] = 1.0 / 3 * ((Ax) + 0.5 * (Ax + Bx) + 0.5 * (Bx + Cx));
-        location[1] = 1.0 / 3 * ((Ay) + 0.5 * (Ay + By) + 0.5 * (By + Cy));
-        Log.d("listSortedNode", listSortedNode.toString());
-        Log.d("location", Arrays.toString(location));
-        return location;
-    }
+
 
 
 }
@@ -496,3 +515,9 @@ public class MyUtils {
 //        }
 //        return toReturn;
 //    }
+
+//三个点存在强度排序，然后计算三角形质心
+//    String A = listSortedNode.get(0), B = listSortedNode.get(1), C = listSortedNode.get(2);
+//    Double Ax = bleNodeLoc.get(A)[0], Ay = bleNodeLoc.get(A)[1], Bx = bleNodeLoc.get(B)[0], By = bleNodeLoc.get(B)[1], Cx = bleNodeLoc.get(C)[0], Cy = bleNodeLoc.get(C)[1];
+//        location[0] = 1.0 / 3 * ((Ax) + 0.5 * (Ax + Bx) + 0.5 * (Bx + Cx));
+//                location[1] = 1.0 / 3 * ((Ay) + 0.5 * (Ay + By) + 0.5 * (By + Cy));

@@ -32,6 +32,7 @@ import org.greenrobot.eventbus.ThreadMode;
 
 import java.sql.SQLNonTransientException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Calendar;
 import java.util.HashMap;
 import java.util.List;
@@ -64,7 +65,9 @@ public class ShowMapActivityFragment extends Fragment implements Cloneable {
     //蓝牙有关的参数
     long timeLast;
     long lastTime = 0;
-    String locationLast;
+    double staDevLimit = 0.5;
+    double rssiThreshold = -55;
+    double[] locationLast = new double[2];
     StringBuffer stringBuffer = new StringBuffer();
     Map<String, ArrayList<Double>> mAllRssi = new HashMap<>();    //储存RSSI的MAP
     Map<String, Double> mRssiFilterd = new HashMap<>();     //过滤后的RSSI的Map
@@ -158,7 +161,6 @@ public class ShowMapActivityFragment extends Fragment implements Cloneable {
     public BroadcastReceiver mReceiver = new BroadcastReceiver() {
         String dFinished = BluetoothAdapter.ACTION_DISCOVERY_FINISHED;
 
-
         @Override
         public void onReceive(Context context, Intent intent) {
             Calendar calendar = Calendar.getInstance();
@@ -185,36 +187,29 @@ public class ShowMapActivityFragment extends Fragment implements Cloneable {
                         double getAvgOfFilterdRssiValueList = MyUtils.LogarNormalDistribution(mAllRssi.get(remoteMAC), RSSI_LIMIT);  //获取滤波后的信号强度表和强度平均值
                         mRssiFilterd.put(remoteMAC, getAvgOfFilterdRssiValueList);   //更新MAC地址对应信号强度的map
                         if (mRssiFilterd.size() > 2) {
-//                            List<String> listSortedNode = MyUtils.sortNodeBasedOnRssi(mRssiFilterd, BLE_CHOOSED_NUM);     //得到按距离排序的蓝牙节点的列表
-//                            locationListOfNearest.add(0,listSortedNode.get(0));    //更新每次获得距离最近节点的储存表
-//                            String locationBasedOnMajority = locationListOfNearest.get(0);
-//                            webView.loadUrl(setInsetJS(bleNodeLoc.get(locationBasedOnMajority)[0] + "", bleNodeLoc.get(locationBasedOnMajority)[1] + "","circle_point2"));
-////                            String locationBasedOnMajority = MyUtils.filterLocation(locationListOfNearest, LOCATION_NUM_LIMIT);    //由多数法选出可能的点
-////                            Double[] locationNearest = getNearestNode(listSortedNode, bleNodeLoc);   //定位为最近的节点的位置。
-////                            location = getMassCenterLocation(listSortedNode, bleNodeLoc);   //通过质心定位得到位置
-//                            if(conutForInitialize == 1) {     //判断是否为第一次进入函数
-//                                if (!locationBasedOnMajority.equals(locationLast)) {    //当新出现的节点与上一个定位点不相同时
-//                                    String locationTrue = getSensorConfirm(locationLast, locationBasedOnMajority, timeLast, currentMillisecond, bleNodeLoc, listOfTime);
-//                                    if(!locationTrue.equals(locationLast)){    //仅当定位点发生变化时，才修改记录的定位点和定位时间
-//                                        timeLast = currentMillisecond;
-//                                        locationLast = locationTrue;
-//                                    }
-//                                }
-//                            }else{
-//                                locationLast = locationListOfNearest.get(0);
-//                                timeLast = currentMillisecond;
-//                                conutForInitialize = 1;
-//                            }
-                            SparseArray<ArrayList<String>> test = MyUtils.sortNodeBasedOnRssi(mRssiFilterd, BLE_CHOOSED_NUM);
-                            ArrayList<String> listOfMac = test.get(1);
-                            ArrayList<String> listOfRssi = test.get(2);
-
-                            for(int i = 0; i < listOfMac.size(); i++){
-                                need += listOfMac.get(i) + " " + listOfRssi.get(i) + "\n";
+                            SparseArray<ArrayList<String>> SortedNodeMacAndRssi = MyUtils.sortNodeBasedOnRssi(mRssiFilterd, BLE_CHOOSED_NUM);     //得到按距离排序的蓝牙节点的列表
+//                            String locationBasedOnMajority = MyUtils.filterLocation(locationListOfNearest, LOCATION_NUM_LIMIT);    //由多数法选出可能的点
+//                            Double[] locationNearest = getNearestNode(listSortedNode, bleNodeLoc);   //定位为最近的节点的位置。
+                            double[] locationOnBluetooth = getMassCenter(SortedNodeMacAndRssi, bleNodeLoc);   //通过质心定位得到位置
+                            webView.loadUrl(setInsetJS(locationOnBluetooth[0] + "", locationOnBluetooth[1] + "","circle_point2"));
+                            if(conutForInitialize == 1) {     //判断是否为第一次进入函数
+                                if (!(locationOnBluetooth == locationLast)) {    //当新出现的节点与上一个定位点不相同时
+                                    double[] locationConfirmed = MyUtils.getSensorConfirm(locationLast, locationOnBluetooth, timeLast, currentMillisecond, listOfTime);
+                                    if(!(locationConfirmed == locationLast)){    //仅当定位点发生变化时，才修改记录的定位点和定位时间
+                                        timeLast = currentMillisecond;
+                                        locationLast = locationConfirmed;
+                                    }
+                                }
+                            }else{
+                                locationLast = locationOnBluetooth;
+                                timeLast = currentMillisecond;
+                                conutForInitialize = 1;
                             }
-//                            String need = bleNodeLoc.get(locationBasedOnMajority)[0] + "\n" + bleNodeLoc.get(locationBasedOnMajority)[1];
+                            for(int i = 0; i < SortedNodeMacAndRssi.get(1).size(); i++){
+                                need += SortedNodeMacAndRssi.get(1).get(i) + " " + SortedNodeMacAndRssi.get(1).get(i) + "\n";
+                            }
                             mTextGyro.setText(need);
-//                            webView.loadUrl(setInsetJS(bleNodeLoc.get(locationLast)[0] + "", bleNodeLoc.get(locationLast)[1] + "","circle_point"));
+                            webView.loadUrl(setInsetJS(locationLast[0] + "", locationLast[1] + "","circle_point"));
                         }
                     }
                 }
@@ -222,39 +217,31 @@ public class ShowMapActivityFragment extends Fragment implements Cloneable {
         }
     };
 
-    //// TODO: 2017/5/11 测试老师的想法，测试在两个节点中间，强度差？
-
-    //当获得角度大于零时，传入的新坐标点是对的；小于零也包括传感器提示没有行动时，返回传入的旧坐标点
-    //超过2秒没有发生步伐，认为是静止，采用蓝牙的结果；多于4秒没有发生变化采用最后一次蓝牙的结果，以避免无尽的跳来跳去。
-    public String getSensorConfirm(String locationLast, String locationOnMajority, long timeLast,long currentMillisecond, Map<String, double[]> bleNodeLoc, ArrayList<Long> listOfTime){
-        long sensorLatestUpdateTime = listOfTime.get(0);    //时间列表最后更新的时间
-        long timeDiff = currentMillisecond - sensorLatestUpdateTime;
-        if(timeDiff < 2000) {
-            double[] locationOld = bleNodeLoc.get(locationLast);
-            double[] locationNew = bleNodeLoc.get(locationOnMajority);
-            double[] vectorBasedOnBluetooth = {locationNew[0] - locationOld[0], locationNew[1] - locationOld[1]};
-            double[] locationOldSensor = MyUtils.searchTimeList(timeLast, listOfTime, "cutFromOldTime");
-            double[] locationNewSensor = MyUtils.searchTimeList(currentMillisecond, listOfTime, "dontCut");
-            double[] vectorBasedOnSensor = {locationNewSensor[0] - locationOldSensor[0], locationNewSensor[1] - locationOldSensor[1]};
-
-            double angle = MyUtils.getVectorAngle(vectorBasedOnBluetooth, vectorBasedOnSensor);
-            String toReturn;
-            if (angle > 0) {
-                toReturn = locationOnMajority;
-            } else {
-                toReturn = locationLast;
+    //使用质心定位得到坐标
+    public double[] getMassCenter(SparseArray<ArrayList<String>> SortedNodeMacAndRssi, Map<String, double[]> bleNodeLoc) {
+        ArrayList<String> SortedNodeMacList = SortedNodeMacAndRssi.get(1);   //获取排好序的节点的MAC地址的列表
+        ArrayList<String> SortedNodeRssiList = SortedNodeMacAndRssi.get(2);  //获取排好序的节点的RSSI地址的列表
+        int lenOfMacAndRssi = SortedNodeMacList.size();   //首先获取节点列表的长度
+        double[] massCenter = {0.0, 0.0};
+        for(int i = lenOfMacAndRssi; i > 0; i--){    //从多到少，分别计算方差，方差小于某个值时，认为这几个值相近，求这几个值的质心
+            ArrayList<String> rssiList= MyUtils.cutList(SortedNodeRssiList,i);
+            ArrayList<String> macList= MyUtils.cutList(SortedNodeMacList,i);
+            double staDev = MyUtils.getStaDev(rssiList, MyUtils.getAvg(rssiList), "not sure");
+            if(staDev < staDevLimit){
+                for(int j = 0; j < i; j++){
+                    double[] node =  bleNodeLoc.get(macList.get(j));
+                    massCenter[0] += node[0];
+                    massCenter[1] += node[1];
+                }
+                massCenter[0] = massCenter[0] / i;
+                massCenter[1] = massCenter[1] / i;
+                break;
             }
-            String locBasedOnBluetooth = locationOld[0] + "," + locationOld[1] + "  " + locationNew[0] + "," + locationNew[1] + "\n";
-            String locBasedOnSensor = locationOldSensor[0] + "," + locationOldSensor[1] + "  " + locationNewSensor[0] + "," + locationNewSensor[1] + "\n";
-//        stringBuffer.append()
-
-            return toReturn;
-        }else if(timeDiff > 4000){
-            return locationLast;
-        }else{
-            return locationOnMajority;
         }
+        return massCenter;
     }
+
+
 
 
     //提示用户开启手机蓝牙
