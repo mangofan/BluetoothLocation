@@ -31,10 +31,14 @@
             </intent-filter>
         </activity>
 
-        <!--<service-->
-            <!--android:name="com.example.fanwe.SensorService"-->
-            <!--android:enabled="true"-->
-            <!--android:exported="true"></service>-->
+        <!-- <service -->
+        <!-- android:name="com.example.fanwe.SensorService" -->
+        <!-- android:enabled="true" -->
+        <!-- android:exported="true"></service> -->
+        <service
+            android:name="com.example.fanwe.service.BleService"
+            android:enabled="true"
+            android:exported="true"></service>
     </application>
 
 </manifest>

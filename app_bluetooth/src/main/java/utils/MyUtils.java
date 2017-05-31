@@ -28,13 +28,13 @@ public class MyUtils {
 
     //当获得角度大于零时，传入的新坐标点是对的；小于零也包括传感器提示没有行动时，返回传入的旧坐标点
     //超过2秒没有发生步伐，认为是静止，传感器数据不再使用，直接采用蓝牙的结果；多于4秒没有发生变化，采用最后一次蓝牙的结果，以避免无尽的跳来跳去;少于2秒时，仍使用传感器结果和蓝牙进行比对确定位置。
-    public static double[] getSensorConfirm(double[] locationOnBluetoothOld, double[] locationOnBluetoothNew, long timeLast,long currentMillisecond, ArrayList<Long> listOfTime){
-        long sensorLatestUpdateTime = listOfTime.get(0);    //时间列表最后更新的时间
+    public static double[] getSensorConfirm(double[] locationOnBluetoothOld, double[] locationOnBluetoothNew, long timeLast,long currentMillisecond, ArrayList<Long> listOfTimeSensor){
+        long sensorLatestUpdateTime = listOfTimeSensor.get(0);    //时间列表最后更新的时间
         long timeDiff = currentMillisecond - sensorLatestUpdateTime;
         if(timeDiff < 2000) {
             double[] vectorBasedOnBluetooth = {locationOnBluetoothNew[0] - locationOnBluetoothOld[0], locationOnBluetoothNew[1] - locationOnBluetoothOld[1]};
-            double[] locationOldSensor = MyUtils.searchTimeList(timeLast, listOfTime, "cutFromOldTime");
-            double[] locationNewSensor = MyUtils.searchTimeList(currentMillisecond, listOfTime, "dontCut");
+            double[] locationOldSensor = MyUtils.searchTimeList(timeLast, listOfTimeSensor, "cutFromOldTime");
+            double[] locationNewSensor = MyUtils.searchTimeList(currentMillisecond, listOfTimeSensor, "dontCut");
             double[] vectorBasedOnSensor = {locationNewSensor[0] - locationOldSensor[0], locationNewSensor[1] - locationOldSensor[1]};
 
             double angle = MyUtils.getVectorAngle(vectorBasedOnBluetooth, vectorBasedOnSensor);
@@ -75,7 +75,7 @@ public class MyUtils {
     }
 
     //每步产生时记录位置，记录时间，为了以后的查询中使用
-    public static double[] makeOneStepProcess(ArrayList<Double> listOfOrientation, ArrayList<Long>listOfTime){
+    public static double[] makeOneStepProcess(ArrayList<Double> listOfOrientation, ArrayList<Long>listOfTimeSensor){
         if(listOfOrientation.size() == 0)
             return new double[]{Sx,Sy};
         else {
@@ -86,13 +86,13 @@ public class MyUtils {
             }
             double avgOrientation = getAvg(listOfOrientation);
             double staDev = getStaDev(listOfOrientation, avgOrientation, "not sure");
-            double stepLength = 0.6;
+            double stepLength = 0.6;  //假定步长是0.6
             Sx += -Math.sin(avgOrientation) * stepLength;   //原坐标轴以东为正，现在坐标轴以西为正
             Sy += Math.cos(avgOrientation) * stepLength;
             int length = listOfOrientation.size();
             double[] location = {Sx, Sy, avgOrientation, staDev, length};
             locationBasedOnSensor.put(currentTime, location);
-            listOfTime.add(0, currentTime);
+            listOfTimeSensor.add(0, currentTime);
             listOfOrientation.clear();
             return location;
         }
@@ -113,11 +113,11 @@ public class MyUtils {
     }
 
     //寻找列表中与传入时间最接近的时间，返回这个时间对应的坐标。维持时间和位置列表的长度不至于过长
-    public static double[] searchTimeList(long time, ArrayList<Long> listOfTime, String howToDealWithTimeList){
+    public static double[] searchTimeList(long time, ArrayList<Long> listOfTimeSensor, String howToDealWithTimeList){
         long theDiff = 1000000;
         int j = 0;
-        for(int i = 0; i<listOfTime.size(); i++){
-            long diff = Math.abs(listOfTime.get(i) - time);
+        for(int i = 0; i<listOfTimeSensor.size(); i++){
+            long diff = Math.abs(listOfTimeSensor.get(i) - time);
             if(diff <= theDiff){
                 theDiff = diff;
                 j = i;
@@ -126,15 +126,15 @@ public class MyUtils {
                 break;
             }
         }
-        long timeQuery = listOfTime.get(j);   //获得查找到的时间
+        long timeQuery = listOfTimeSensor.get(j);   //获得查找到的时间
 
         double[] hahh = {14.0,0.0};     //初始进入时，有可能传感器定位还没有值，此时给定值为14.0,0.0
         double[] testReturn = locationBasedOnSensor.get(timeQuery, hahh);   //如果查找的时间不存在值，则返回（14.0,0.0），认为是初始进入时没有值时的情况
         String mark = "cutFromOldTime";                  //正常情况下，测试是否为对旧时间的query，如果是的话对list进行维持长度的操作。
-        if (howToDealWithTimeList.equals(mark) && (listOfTime.size() - 1 != j)) {
-            for (int k = listOfTime.size() - 1; k > j; k--) {
-                locationBasedOnSensor.delete(listOfTime.get(k));
-                listOfTime.remove(k);
+        if (howToDealWithTimeList.equals(mark) && (listOfTimeSensor.size() - 1 != j)) {
+            for (int k = listOfTimeSensor.size() - 1; k > j; k--) {
+                locationBasedOnSensor.delete(listOfTimeSensor.get(k));
+                listOfTimeSensor.remove(k);
             }
         }
         return testReturn;
@@ -282,6 +282,22 @@ public class MyUtils {
         return stadardDev;
     }
 
+    //求ArrayList方差
+    public static double getVariance(ArrayList list, Double avg, String distribution) {
+        double variance = 0.0;
+        if (list.size() > 1) {
+            for (int i = 0; i < list.size(); i++) {
+                variance += Math.pow((Double.valueOf(list.get(i).toString()) - avg), 2);
+            }
+            if (distribution.equals("logarNormal"))
+                variance = variance / list.size();
+            else
+                variance = variance / (list.size() - 1);
+        }
+        return variance;
+    }
+
+
     //对数正态滤波
     public static double LogarNormalDistribution(ArrayList<Double> mAllRssilist, int RSSI_LIMIT) {
         cutListAndDelete(mAllRssilist, RSSI_LIMIT);  //按照limit切割子list，并删除切割后剩余的值
@@ -367,7 +383,7 @@ public class MyUtils {
 //        ay = accConverted[1];
 //
 //        Long currentMillisecond = Calendar.getInstance().getTimeInMillis();
-//        double timeDiff = (currentMillisecond - listOfTime.get(0)) / 1000.0;
+//        double timeDiff = (currentMillisecond - listOfTimeSensor.get(0)) / 1000.0;
 //
 //        if((Math.abs(ax) == 0.0) && (Math.abs(ay) == 0.0)){
 //            V0x = 0.0;
@@ -389,10 +405,10 @@ public class MyUtils {
 //        locationBasedOnSensor.put(currentMillisecond, location);
 //
 //        //以时间差不能超过6秒钟的条件维持map大小。
-//        listOfTime.add(0,currentMillisecond);
-//        long oldestTime = listOfTime.get(listOfTime.size()-1);
+//        listOfTimeSensor.add(0,currentMillisecond);
+//        long oldestTime = listOfTimeSensor.get(listOfTimeSensor.size()-1);
 //        if((currentMillisecond - oldestTime) > 6000){
-//            listOfTime.remove(oldestTime);
+//            listOfTimeSensor.remove(oldestTime);
 //            locationBasedOnSensor.delete(oldestTime);
 //        }
 //    }
@@ -498,8 +514,8 @@ public class MyUtils {
 //        thread.start();
 
 
-//    public static void changeForNewNode(ArrayList<Long>listOfTime, double[]locationNew, long currentTime){
-//        listOfTime.add(0, currentTime);
+//    public static void changeForNewNode(ArrayList<Long>listOfTimeSensor, double[]locationNew, long currentTime){
+//        listOfTimeSensor.add(0, currentTime);
 //        Sx = locationNew[0];
 //        Sy = locationNew[1];
 //        locationBasedOnSensor.put(currentTime,locationNew);
@@ -521,3 +537,22 @@ public class MyUtils {
 //    Double Ax = bleNodeLoc.get(A)[0], Ay = bleNodeLoc.get(A)[1], Bx = bleNodeLoc.get(B)[0], By = bleNodeLoc.get(B)[1], Cx = bleNodeLoc.get(C)[0], Cy = bleNodeLoc.get(C)[1];
 //        location[0] = 1.0 / 3 * ((Ax) + 0.5 * (Ax + Bx) + 0.5 * (Bx + Cx));
 //                location[1] = 1.0 / 3 * ((Ay) + 0.5 * (Ay + By) + 0.5 * (By + Cy));
+
+
+//设置每隔TIME0更新UI
+//        Timer updateTimer = new Timer("Update");
+//        updateTimer.scheduleAtFixedRate(new TimerTask() {
+//            @Override
+//            public void run() {
+//                updateGUI();
+//            }
+//        }, 0, TIME0);
+
+//    //UI 更新方法
+//    private void updateGUI() {
+//        getActivity().runOnUiThread(new Runnable() {
+//            @Override
+//            public void run() {
+//            }
+//        });
+//    }
