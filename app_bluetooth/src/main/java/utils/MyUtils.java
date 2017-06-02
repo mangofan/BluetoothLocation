@@ -7,6 +7,7 @@ import android.support.v4.util.LongSparseArray;
 import android.util.Log;
 import android.util.SparseArray;
 
+import java.security.spec.EllipticCurve;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Calendar;
@@ -21,9 +22,67 @@ import static utils.Quaternion.getQuaternionMulit;
 
 public class MyUtils {
 
+    private static final String TAG = "MyUtils";
+    static int TARGET_TIME = 1500, TIME_INTERVAL = 1000;
+    private static double varianceLimit = 0.5;   //对于方差的限制
     private static double Sx = 14.0, Sy = 0.0;
     private static Double[] accBias = {0.0,0.0,0.0}, accStaDev =  {0.0,0.0,0.0};
     private static LongSparseArray<double[]> locationBasedOnSensor = new LongSparseArray<>();
+
+//    public static LongSparseArray<String> searchTimeListForRecentConfirm(LongSparseArray<String> recentLocationMap){
+    public static LongSparseArray<String> searchTimeListForRecentConfirm(LongSparseArray<String> recentLocationMap){
+//        String test = recentLocationMap.get(recentLocationMap.keyAt(1));
+//        recentLocationMap.removeAt(1);
+//        String test1 = recentLocationMap.get(recentLocationMap.keyAt(1));
+//        recentLocationMap.removeAt(1);
+//        String test2 = recentLocationMap.get(recentLocationMap.keyAt(2));
+//        Log.d(TAG, "test");
+
+        LongSparseArray<String> toReturn = new LongSparseArray<>();
+        long lastTime = recentLocationMap.keyAt(recentLocationMap.size() -1);   //得到本次插入的时间
+        long targetTime = lastTime - TARGET_TIME;  //求出目标时间，常数值标志现在时间与目标时间的差
+        double oldTimeEnd = targetTime + 0.5* TIME_INTERVAL;  //所要搜寻的时间范围的下界，常数值标志在targetTIme两侧总的搜寻时间的范围。
+        double oldTimeStart = targetTime - 0.5 * TIME_INTERVAL;    //搜寻的时间范围的上界，常数值标志在targetTIme两侧总的搜寻时间的范围。
+        int lengthOfMap = recentLocationMap.size();
+
+        int j = 0;
+        for(int i = 0; i < lengthOfMap; i++){
+            if(recentLocationMap.keyAt(i) < oldTimeStart){
+                recentLocationMap.remove(i);    //查找到搜索的时间段的上界的index,并把上界之前的值都删除，这样上界肯定是0
+                i = i - 1;
+                lengthOfMap -= 1;
+            }else if(recentLocationMap.keyAt(i) < oldTimeEnd){
+                toReturn.put(recentLocationMap.keyAt(i), recentLocationMap.valueAt(i));     //在上界和下界之间的部分，存入到map中，返回
+            }else
+                break;
+        }
+
+        return toReturn;
+    }
+
+    //使用质心定位得到坐标
+    public static double[] getMassCenter(SparseArray<ArrayList<String>> SortedNodeMacAndRssi, Map<String, double[]> bleNodeLoc) {
+        ArrayList<String> SortedNodeMacList = SortedNodeMacAndRssi.get(1);   //获取排好序的节点的MAC地址的列表
+        ArrayList<String> SortedNodeRssiList = SortedNodeMacAndRssi.get(2);  //获取排好序的节点的RSSI地址的列表
+        int lenOfMacAndRssi = SortedNodeMacList.size();   //首先获取节点列表的长度
+        double[] massCenter = {0.0, 0.0};
+        for (int i = lenOfMacAndRssi; i > 0; i--) {    //从多到少，分别计算方差，方差小于某个值时，认为这几个值相近，求这几个值的质心
+            ArrayList<String> rssiList = MyUtils.cutList(SortedNodeRssiList, i);
+            ArrayList<String> macList = MyUtils.cutList(SortedNodeMacList, i);
+            double variance = MyUtils.getVariance(rssiList, MyUtils.getAvg(rssiList), "not sure");
+            if (variance < varianceLimit) {
+                for (int j = 0; j < i; j++) {
+                    double[] node = bleNodeLoc.get(macList.get(j));
+                    massCenter[0] += node[0];
+                    massCenter[1] += node[1];
+                }
+                massCenter[0] = massCenter[0] / i;
+                massCenter[1] = massCenter[1] / i;
+                break;
+            }
+        }
+        return massCenter;
+    }
 
 
     //当获得角度大于零时，传入的新坐标点是对的；小于零也包括传感器提示没有行动时，返回传入的旧坐标点
@@ -33,8 +92,8 @@ public class MyUtils {
         long timeDiff = currentMillisecond - sensorLatestUpdateTime;
         if(timeDiff < 2000) {
             double[] vectorBasedOnBluetooth = {locationOnBluetoothNew[0] - locationOnBluetoothOld[0], locationOnBluetoothNew[1] - locationOnBluetoothOld[1]};
-            double[] locationOldSensor = MyUtils.searchTimeList(timeLast, listOfTimeSensor, "cutFromOldTime");
-            double[] locationNewSensor = MyUtils.searchTimeList(currentMillisecond, listOfTimeSensor, "dontCut");
+            double[] locationOldSensor = searchTimeList(timeLast, listOfTimeSensor, "cutFromOldTime");
+            double[] locationNewSensor = searchTimeList(currentMillisecond, listOfTimeSensor, "dontCut");
             double[] vectorBasedOnSensor = {locationNewSensor[0] - locationOldSensor[0], locationNewSensor[1] - locationOldSensor[1]};
 
             double angle = MyUtils.getVectorAngle(vectorBasedOnBluetooth, vectorBasedOnSensor);
@@ -139,6 +198,8 @@ public class MyUtils {
         }
         return testReturn;
     }
+
+
 
     //在locationListOfNearest中选择多数作为当前的位置。
     public static String filterLocation(ArrayList<String> locationListOfNearest, int LOCATION_NUM_LIMIT){

@@ -18,7 +18,7 @@ import com.example.fanwe.view.ShowMapActivityFragment;
 import java.util.ArrayList;
 import java.util.List;
 
-import activity.BleListener;
+import com.example.fanwe.view.BleListener;
 
 
 public class BleService extends Service {
@@ -33,7 +33,7 @@ public class BleService extends Service {
     public BleService() {
     }
 
-    class BleThread extends Thread{
+    private class BleThread extends Thread{
         @Override
         public void run() {
             super.run();
