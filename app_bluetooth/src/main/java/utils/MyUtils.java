@@ -23,40 +23,69 @@ import static utils.Quaternion.getQuaternionMulit;
 public class MyUtils {
 
     private static final String TAG = "MyUtils";
-    static int TARGET_TIME = 1500, TIME_INTERVAL = 1000;
     private static double varianceLimit = 0.5;   //对于方差的限制
     private static double Sx = 14.0, Sy = 0.0;
     private static Double[] accBias = {0.0,0.0,0.0}, accStaDev =  {0.0,0.0,0.0};
     private static LongSparseArray<double[]> locationBasedOnSensor = new LongSparseArray<>();
 
-//    public static LongSparseArray<String> searchTimeListForRecentConfirm(LongSparseArray<String> recentLocationMap){
-    public static LongSparseArray<String> searchTimeListForRecentConfirm(LongSparseArray<String> recentLocationMap){
-//        String test = recentLocationMap.get(recentLocationMap.keyAt(1));
-//        recentLocationMap.removeAt(1);
-//        String test1 = recentLocationMap.get(recentLocationMap.keyAt(1));
-//        recentLocationMap.removeAt(1);
-//        String test2 = recentLocationMap.get(recentLocationMap.keyAt(2));
-//        Log.d(TAG, "test");
 
-        LongSparseArray<String> toReturn = new LongSparseArray<>();
-        long lastTime = recentLocationMap.keyAt(recentLocationMap.size() -1);   //得到本次插入的时间
+    public static double[] searchTimeListForRecentConfirmMap(LongSparseArray<String> recentLocationMapRaw) {
+        int TARGET_TIME = 1500, TIME_INTERVAL = 1000;
+        int indexOfOldTimeEnd = 0;
+        double[] toReturn = new double[2];
+        long lastTime = recentLocationMapRaw.keyAt(recentLocationMapRaw.size() - 1);   //得到本次插入的时间
         long targetTime = lastTime - TARGET_TIME;  //求出目标时间，常数值标志现在时间与目标时间的差
-        double oldTimeEnd = targetTime + 0.5* TIME_INTERVAL;  //所要搜寻的时间范围的下界，常数值标志在targetTIme两侧总的搜寻时间的范围。
+        double oldTimeEnd = targetTime + 0.5 * TIME_INTERVAL;  //所要搜寻的时间范围的下界，常数值标志在targetTIme两侧总的搜寻时间的范围。
         double oldTimeStart = targetTime - 0.5 * TIME_INTERVAL;    //搜寻的时间范围的上界，常数值标志在targetTIme两侧总的搜寻时间的范围。
-        int lengthOfMap = recentLocationMap.size();
+        Map<String, Integer> locationMap = new HashMap<>();
+        int lengthOfMap = recentLocationMapRaw.size();
 
-        int j = 0;
-        for(int i = 0; i < lengthOfMap; i++){
-            if(recentLocationMap.keyAt(i) < oldTimeStart){
-                recentLocationMap.remove(i);    //查找到搜索的时间段的上界的index,并把上界之前的值都删除，这样上界肯定是0
-                i = i - 1;
+        for (int i = 0; i < lengthOfMap; i++) {
+            if (recentLocationMapRaw.keyAt(i) < oldTimeStart) {  //查找到搜索的时间段的上界的index,并把上界之前的值都删除，这样上界肯定是0
+                recentLocationMapRaw.remove(i);
+                i -= 1;
                 lengthOfMap -= 1;
-            }else if(recentLocationMap.keyAt(i) < oldTimeEnd){
-                toReturn.put(recentLocationMap.keyAt(i), recentLocationMap.valueAt(i));     //在上界和下界之间的部分，存入到map中，返回
-            }else
+            } else if (recentLocationMapRaw.keyAt(i) < oldTimeEnd) {
+                String locationThisTime = recentLocationMapRaw.valueAt(i);
+                if(locationMap.containsKey(locationThisTime)){
+                    int lastTimeOfThisLocation = locationMap.get(locationThisTime);
+                    if(lastTimeOfThisLocation != (i-1)){     //当两个相同位置（A）在时间序列上出现的位置不相邻时
+                        for(int j = lastTimeOfThisLocation + 1; j < i; j++){
+                            recentLocationMapRaw.setValueAt(j, locationThisTime);   //将两次A之间的所有元素修改为A
+                        }
+                    }else{
+                        locationMap.put(locationThisTime, i);   //两次A相邻时，更新locationMap
+                    }
+                }else{            //当locationMap没出现过这个元素时，在locationMap中添加。
+                    locationMap.put(recentLocationMapRaw.valueAt(i), i);
+                }
+                indexOfOldTimeEnd = i;   //得知所求时间段的index为从0到indexOfOldTimeEnd
+            }else{
                 break;
+            }
         }
 
+        //对这一秒内出现的节点进行计数，取最大。
+        int flag = 0;
+        Map<String, Integer> map = new HashMap<>();
+        for (int i = 0; i < indexOfOldTimeEnd; i++) {
+            String location = recentLocationMapRaw.get(i);
+            if (map.containsKey(location)) {
+                Integer count = map.get(location);
+                count = count + 1;
+                map.put(location, count);
+            } else {
+                map.put(location, 0);
+            }
+        }
+        for (String loc : map.keySet()) {
+            int locNum = map.get(loc);
+            if (locNum > flag) {
+                flag = locNum;
+                toReturn[0] = Double.valueOf(loc.split(",")[0]);
+                toReturn[1] = Double.valueOf(loc.split(",")[1]);
+            }
+        }
         return toReturn;
     }
 
