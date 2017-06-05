@@ -51,7 +51,7 @@ import static com.example.fanwe.view.ShowMapActivity.bluetoothAdapter;
 public class ShowMapActivityFragment extends Fragment implements Cloneable {
 
     private static final int ENABLE_BLUETOOTH = 1;
-    public static Map<String, double[]> bleNodeLoc = new HashMap<>();    //固定节点的位置Map
+    public static Map<String, String> bleNodeLoc = new HashMap<>();    //固定节点的位置Map
     float angleBias = 19f;  //建筑物方向与正北向的夹角，建筑物方向是正北向的的北偏东多少度。
     WebView webView;
     TextView mTextAcc, mTextGyro, mTexthh;
@@ -60,10 +60,11 @@ public class ShowMapActivityFragment extends Fragment implements Cloneable {
 
     //蓝牙有关的参数
     long timeLast;
-    double[] locationLast = new double[2];   //上次或者本次的确定位置
+    String locationLast ;   //上次或者本次的确定位置
     int RECENT_LIMIT = 8;
     int TARGET_TIME = 1500, TIME_INTERVAL = 1000;
     StringBuffer stringBuffer = new StringBuffer();
+    StringBuffer stringBuffer1 = new StringBuffer();
     Map<String, ArrayList<Double>> mAllRssi = new HashMap<>();    //储存RSSI的MAP
     Map<String, Double> mRssiFilterd = new HashMap<>();     //过滤后的RSSI的Map
     Map<String, Float> bleNodeRssiBias = new HashMap<>();   //节点信号强度的偏差值Map
@@ -173,34 +174,36 @@ public class ShowMapActivityFragment extends Fragment implements Cloneable {
         mRssiFilterd.put(remoteMac, getAvgOfFilterdRssiValueList);   //更新MAC地址对应信号强度的map
         if (mRssiFilterd.size() > 2) {
             SparseArray<ArrayList<String>> SortedNodeMacAndRssi = MyUtils.sortNodeBasedOnRssi(mRssiFilterd, BLE_CHOOSED_NUM);     //得到按距离排序的蓝牙节点的列表
-            double[] locationOnBluetooth = MyUtils.getMassCenter(SortedNodeMacAndRssi, bleNodeLoc);   //通过质心定位得到位置
+            String locationOnBluetooth = MyUtils.getMassCenter(SortedNodeMacAndRssi, bleNodeLoc);   //通过质心定位得到位置
             locationOnBluetooth = getRecentConfirm(currentMillisecond, locationOnBluetooth);
-//            if (conutForInitialize == 1) {     //判断是否为第一次进入函数
-//                if (!(locationOnBluetooth == locationLast)) {    //当新出现的节点与上一个定位点不相同时
-//                    double[] locationSensorConfirmed = MyUtils.getSensorConfirm(locationLast, locationOnBluetooth, timeLast, currentMillisecond, listOfTimeSensor);
-//                    if (!(locationSensorConfirmed == locationLast)) {    //仅当定位点发生变化时，才修改记录的定位点和定位时间
-//                        timeLast = currentMillisecond;
-//                        locationLast = locationSensorConfirmed;   //此时的locationLast就是这次的真正位置，
-//                    }
-//                }
-//            } else {
-//                locationLast = locationOnBluetooth;
-//                timeLast = currentMillisecond;
-//                conutForInitialize = 1;
-//            }
-//            webView.loadUrl(setInsetJS(locationLast[0] + "", locationLast[1] + "", "circle_point"));
-//            for (int i = 0; i < SortedNodeMacAndRssi.get(1).size(); i++) {
-//                need += SortedNodeMacAndRssi.get(1).get(i) + " " + SortedNodeMacAndRssi.get(2).get(i) + "\n";
-//            }
-//            mTextGyro.setText(need);
+            if (conutForInitialize == 1) {     //判断是否为第一次进入函数
+                if (!(locationOnBluetooth.equals(locationLast))) {    //当新出现的节点与上一个定位点不相同时
+                    String locationSensorConfirmed = MyUtils.getSensorConfirm(locationLast, locationOnBluetooth, timeLast, currentMillisecond, listOfTimeSensor);
+                    if (!(locationSensorConfirmed.equals(locationLast))) {    //仅当定位点发生变化时，才修改记录的定位点和定位时间
+                        timeLast = currentMillisecond;
+                        locationLast = locationSensorConfirmed;   //此时的locationLast就是这次的真正位置，
+                    }
+                }
+            } else {
+                locationLast = locationOnBluetooth;
+                timeLast = currentMillisecond;
+                conutForInitialize = 1;
+            }
+            double[] locationLastDouble = new double[2];
+            locationLastDouble[0] = Double.valueOf(locationLast.split(",")[0]);
+            locationLastDouble[1] = Double.valueOf(locationLast.split(",")[1]);
+            webView.loadUrl(setInsetJS(locationLastDouble[0] + "", locationLastDouble[1] + "", "circle_point"));
+            for (int i = 0; i < SortedNodeMacAndRssi.get(1).size(); i++) {
+                need += SortedNodeMacAndRssi.get(1).get(i) + " " + SortedNodeMacAndRssi.get(2).get(i) + "\n";
+            }
+            mTextGyro.setText(need);
         }
     }
 
     //根据最近几次确定的位置，应当排除的情况是定位点出现ABA这种来回的情况时, 要求几秒之内，定位的轨迹应该是一条线，不应该成环，即出现ABA这种情况，这种时候应该过滤掉B
-    public double[] getRecentConfirm(long time, double[] locationOnBluetooth) {
-        String locationString = locationOnBluetooth[0] + "," + locationOnBluetooth[1];
-        String locationStringFinal = "hh";
-        recentLocationMapRaw.put(time, locationString);
+    public String getRecentConfirm(long time, String locationOnBluetooth) {
+        String locationStringFinal = 0 + "," + 0;
+        recentLocationMapRaw.put(time, locationOnBluetooth);
         int indexOfOldTimeEnd = 0;
         double[] toReturn = new double[2];
         long lastTime = recentLocationMapRaw.keyAt(recentLocationMapRaw.size() - 1);   //得到本次插入的时间
@@ -223,8 +226,20 @@ public class ShowMapActivityFragment extends Fragment implements Cloneable {
                 if(locationMap.containsKey(locationThisTime)){
                     int lastTimeOfThisLocation = locationMap.get(locationThisTime);
                     if(lastTimeOfThisLocation != (i-1)){     //当两个相同位置（A）在时间序列上出现的位置不相邻时
-                        for(int j = lastTimeOfThisLocation + 1; j < i; j++){
-                            recentLocationMapRaw.setValueAt(j, locationThisTime);   //将两次A之间的所有元素修改为A
+                        int flag = 0;
+                        int limit = (i + 5 < lengthOfMap) ? (i + 5):lengthOfMap;
+                        for(int k = i+1; k < limit; k++){
+                            if(recentLocationMapRaw.valueAt(k).equals(recentLocationMapRaw.valueAt(k-1))){
+                                flag = 1;
+                            }else{
+                                flag = 0;
+                                break;
+                            }
+                        }
+                        if(flag == 1) {  //当连续出现5个以上相同的A时将中间的点都置为A，避免误差
+                            for (int j = lastTimeOfThisLocation + 1; j < i; j++) {
+                                recentLocationMapRaw.setValueAt(j, locationThisTime);   //将两次A之间的所有元素修改为A
+                            }
                         }
                     }else{
                         locationMap.put(locationThisTime, i);   //两次A相邻时，更新locationMap
@@ -237,8 +252,8 @@ public class ShowMapActivityFragment extends Fragment implements Cloneable {
                 break;
             }
         }
-        stringBuffer.append("\n");
-        mTextAcc.setText(stringBuffer);
+
+//        mTextAcc.setText(stringBuffer);
 
         //对这一秒内出现的节点进行计数，取最大。
         int flag = 0;
@@ -263,8 +278,18 @@ public class ShowMapActivityFragment extends Fragment implements Cloneable {
             }
         }
 
+        stringBuffer.append(" : ");
+        stringBuffer.append(locationStringFinal);
+        stringBuffer.append("\n");
+
+        for(int i = 0; i < indexOfOldTimeEnd; i++){
+            stringBuffer.append(recentLocationMapRaw.valueAt(i));
+            stringBuffer.append(" ");
+        }
+        stringBuffer.append("\n");
+
         webView.loadUrl(setInsetJS(toReturn[0] + "", toReturn[1] + "", "circle_point2"));
-        return toReturn;
+        return locationStringFinal;
     }
 
 
@@ -283,6 +308,7 @@ public class ShowMapActivityFragment extends Fragment implements Cloneable {
         EventBus.getDefault().register(this);
         Intent bindIntent = new Intent(this.getActivity(), BleService.class);
         getActivity().bindService(bindIntent, mConnection, Context.BIND_AUTO_CREATE);
+
         return root;
     }
 
@@ -346,16 +372,26 @@ public class ShowMapActivityFragment extends Fragment implements Cloneable {
 
     //初始化已知蓝牙节点信息
     void initlocation() {
-        double[] location21 = {11.5, 0.7};
-        double[] location22 = {15.8, 0.7};
-        double[] location23 = {7.8, 4.7};
-        double[] location24 = {11.8, 4.7};
-        double[] location25 = {15.8, 4.7};
-        double[] location26 = {19.8, 4.7};
-        double[] location27 = {7.8, 8.7};
-        double[] location28 = {11.8, 8.7};
-        double[] location29 = {15.8, 8.7};
-        double[] location30 = {19.8, 8.7};
+//        double[] location21 = {11.5, 0.7};
+//        double[] location22 = {15.8, 0.7};
+//        double[] location23 = {7.8, 4.7};
+//        double[] location24 = {11.8, 4.7};
+//        double[] location25 = {15.8, 4.7};
+//        double[] location26 = {19.8, 4.7};
+//        double[] location27 = {7.8, 8.7};
+//        double[] location28 = {11.8, 8.7};
+//        double[] location29 = {15.8, 8.7};
+//        double[] location30 = {19.8, 8.7};
+        String location21 = 11.5 + "," + 0.7;
+        String location22 = 15.8 + "," + 0.7;
+        String location23 = 7.8 + "," + 4.7;
+        String location24 = 11.8 + "," + 4.7;
+        String location25 = 15.8 + "," + 4.7;
+        String location26 = 19.8 + "," + 4.7;
+        String location27 = 7.8 + "," + 8.7;
+        String location28 = 11.8 + "," + 8.7;
+        String location29 = 15.8 + "," + 8.7;
+        String location30 = 19.8 + "," + 8.7;
 
         bleNodeLoc.put("19:18:FC:01:F1:0E", location21);
         bleNodeLoc.put("19:18:FC:01:F1:0F", location22);

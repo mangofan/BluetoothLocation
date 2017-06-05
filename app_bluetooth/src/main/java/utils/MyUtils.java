@@ -90,7 +90,7 @@ public class MyUtils {
     }
 
     //使用质心定位得到坐标
-    public static double[] getMassCenter(SparseArray<ArrayList<String>> SortedNodeMacAndRssi, Map<String, double[]> bleNodeLoc) {
+    public static String getMassCenter(SparseArray<ArrayList<String>> SortedNodeMacAndRssi, Map<String, String> bleNodeLoc) {
         ArrayList<String> SortedNodeMacList = SortedNodeMacAndRssi.get(1);   //获取排好序的节点的MAC地址的列表
         ArrayList<String> SortedNodeRssiList = SortedNodeMacAndRssi.get(2);  //获取排好序的节点的RSSI地址的列表
         int lenOfMacAndRssi = SortedNodeMacList.size();   //首先获取节点列表的长度
@@ -101,7 +101,10 @@ public class MyUtils {
             double variance = MyUtils.getVariance(rssiList, MyUtils.getAvg(rssiList), "not sure");
             if (variance < varianceLimit) {
                 for (int j = 0; j < i; j++) {
-                    double[] node = bleNodeLoc.get(macList.get(j));
+                    double[] node = new double[2];
+                    String[] location = bleNodeLoc.get(macList.get(j)).split(",");
+                    node[0] = Double.valueOf(location[0]);
+                    node[1] = Double.valueOf(location[1]);
                     massCenter[0] += node[0];
                     massCenter[1] += node[1];
                 }
@@ -110,15 +113,21 @@ public class MyUtils {
                 break;
             }
         }
-        return massCenter;
+        return massCenter[0] + "," + massCenter[1];
     }
 
 
     //当获得角度大于零时，传入的新坐标点是对的；小于零也包括传感器提示没有行动时，返回传入的旧坐标点
     //超过2秒没有发生步伐，认为是静止，传感器数据不再使用，直接采用蓝牙的结果；多于4秒没有发生变化，采用最后一次蓝牙的结果，以避免无尽的跳来跳去;少于2秒时，仍使用传感器结果和蓝牙进行比对确定位置。
-    public static double[] getSensorConfirm(double[] locationOnBluetoothOld, double[] locationOnBluetoothNew, long timeLast,long currentMillisecond, ArrayList<Long> listOfTimeSensor){
+    public static String getSensorConfirm(String locationOnBluetoothOldString, String locationOnBluetoothNewString, long timeLast,long currentMillisecond, ArrayList<Long> listOfTimeSensor){
         long sensorLatestUpdateTime = listOfTimeSensor.get(0);    //时间列表最后更新的时间
         long timeDiff = currentMillisecond - sensorLatestUpdateTime;
+        double[] locationOnBluetoothOld = new double[2];
+        locationOnBluetoothOld[0] = Double.valueOf(locationOnBluetoothOldString.split(",")[0]);
+        locationOnBluetoothOld[1] = Double.valueOf(locationOnBluetoothOldString.split(",")[1]);
+        double[] locationOnBluetoothNew = new double[2];
+        locationOnBluetoothNew[0] = Double.valueOf(locationOnBluetoothNewString.split(",")[0]);
+        locationOnBluetoothNew[1] = Double.valueOf(locationOnBluetoothNewString.split(",")[1]);
         if(timeDiff < 2000) {
             double[] vectorBasedOnBluetooth = {locationOnBluetoothNew[0] - locationOnBluetoothOld[0], locationOnBluetoothNew[1] - locationOnBluetoothOld[1]};
             double[] locationOldSensor = searchTimeList(timeLast, listOfTimeSensor, "cutFromOldTime");
@@ -132,12 +141,12 @@ public class MyUtils {
             } else {
                 toReturn = locationOnBluetoothOld;
             }
-            return toReturn;
+            return toReturn[0] + "," + toReturn[1];
 
         }else if(timeDiff > 4000){
-            return locationOnBluetoothOld;
+            return locationOnBluetoothOld[0] + "," + locationOnBluetoothOld[1];
         }else{
-            return locationOnBluetoothNew;
+            return locationOnBluetoothNew[0] + "," + locationOnBluetoothNew[1];
         }
     }
 
