@@ -53,6 +53,8 @@ public class BleService extends Service {
     public void initScan(){
         bluetoothLeScanner = ShowMapActivity.bluetoothAdapter.getBluetoothLeScanner();
         bluetoothLeScanner.startScan(buildScanFilters(), buildScanSettings(), leCallback);
+
+
     }
 
     public ScanCallback leCallback = new ScanCallback() {
@@ -67,7 +69,7 @@ public class BleService extends Service {
                     if (ShowMapActivityFragment.bleNodeLoc.containsKey(mac)) {
                         String macRssi = mac + "," + rssi;
                         bleListener.onBleComing(macRssi);
-                        Log.d(TAG, macRssi);
+//                        Log.d(TAG, macRssi);
                     }
                 }
             }
@@ -98,5 +100,7 @@ public class BleService extends Service {
             return BleService.this;
         }
     }
+
+
 
 }

@@ -7,6 +7,7 @@ import android.support.v4.util.LongSparseArray;
 import android.util.Log;
 import android.util.SparseArray;
 
+import java.math.BigDecimal;
 import java.security.spec.EllipticCurve;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -17,6 +18,8 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+
+import static java.math.BigDecimal.ROUND_HALF_UP;
 import static utils.Quaternion.getQuaternionInverse;
 import static utils.Quaternion.getQuaternionMulit;
 
@@ -27,6 +30,31 @@ public class MyUtils {
     private static double Sx = 14.0, Sy = 0.0;
     private static Double[] accBias = {0.0,0.0,0.0}, accStaDev =  {0.0,0.0,0.0};
     private static LongSparseArray<double[]> locationBasedOnSensor = new LongSparseArray<>();
+
+    public static String findTheLoc(int i, int end, LongSparseArray<String>map){
+        //对这一秒内出现的节点进行计数，取最大。
+        int flag = 0;
+        String locationStringFinal = map.valueAt(i);
+        Map<String, Integer> map1 = new HashMap<>();
+        for (int j = i; j < end; j++) {
+            String location = map.valueAt(j);
+            if (map1.containsKey(location)) {
+                Integer count = map1.get(location);
+                count = count + 1;
+                map1.put(location, count);
+            } else {
+                map1.put(location, 0);
+            }
+        }
+        for (String loc : map1.keySet()) {
+            int locNum = map1.get(loc);
+            if (locNum > flag) {
+                flag = locNum;
+                locationStringFinal = loc;
+            }
+        }
+        return locationStringFinal;
+    }
 
 
     public static double[] searchTimeListForRecentConfirmMap(LongSparseArray<String> recentLocationMapRaw) {
@@ -65,51 +93,33 @@ public class MyUtils {
             }
         }
 
-        //对这一秒内出现的节点进行计数，取最大。
-        int flag = 0;
-        Map<String, Integer> map = new HashMap<>();
-        for (int i = 0; i < indexOfOldTimeEnd; i++) {
-            String location = recentLocationMapRaw.get(i);
-            if (map.containsKey(location)) {
-                Integer count = map.get(location);
-                count = count + 1;
-                map.put(location, count);
-            } else {
-                map.put(location, 0);
-            }
-        }
-        for (String loc : map.keySet()) {
-            int locNum = map.get(loc);
-            if (locNum > flag) {
-                flag = locNum;
-                toReturn[0] = Double.valueOf(loc.split(",")[0]);
-                toReturn[1] = Double.valueOf(loc.split(",")[1]);
-            }
-        }
+
         return toReturn;
     }
 
-    //使用质心定位得到坐标
+    //使用质心定位得到坐标,使用BigDecimal来减少将6.7表示为6.6999999999的情况
     public static String getMassCenter(SparseArray<ArrayList<String>> SortedNodeMacAndRssi, Map<String, String> bleNodeLoc) {
         ArrayList<String> SortedNodeMacList = SortedNodeMacAndRssi.get(1);   //获取排好序的节点的MAC地址的列表
         ArrayList<String> SortedNodeRssiList = SortedNodeMacAndRssi.get(2);  //获取排好序的节点的RSSI地址的列表
         int lenOfMacAndRssi = SortedNodeMacList.size();   //首先获取节点列表的长度
-        double[] massCenter = {0.0, 0.0};
+        BigDecimal[] massCenter = new BigDecimal[2];
+        massCenter[0] = new BigDecimal("0.0");
+        massCenter[1] = new BigDecimal("0.0");
         for (int i = lenOfMacAndRssi; i > 0; i--) {    //从多到少，分别计算方差，方差小于某个值时，认为这几个值相近，求这几个值的质心
-            ArrayList<String> rssiList = MyUtils.cutList(SortedNodeRssiList, i);
-            ArrayList<String> macList = MyUtils.cutList(SortedNodeMacList, i);
-            double variance = MyUtils.getVariance(rssiList, MyUtils.getAvg(rssiList), "not sure");
+            ArrayList<String> rssiList = cutList(SortedNodeRssiList, i);
+            ArrayList<String> macList = cutList(SortedNodeMacList, i);
+            double variance = getVariance(rssiList, getAvg(rssiList), "not sure");
             if (variance < varianceLimit) {
                 for (int j = 0; j < i; j++) {
-                    double[] node = new double[2];
+                    BigDecimal[] node = new BigDecimal[2];
                     String[] location = bleNodeLoc.get(macList.get(j)).split(",");
-                    node[0] = Double.valueOf(location[0]);
-                    node[1] = Double.valueOf(location[1]);
-                    massCenter[0] += node[0];
-                    massCenter[1] += node[1];
+                    node[0] = new BigDecimal(location[0]);
+                    node[1] = new BigDecimal(location[1]);
+                    massCenter[0] = massCenter[0].add(node[0]);
+                    massCenter[1] = massCenter[1].add(node[1]);
                 }
-                massCenter[0] = massCenter[0] / i;
-                massCenter[1] = massCenter[1] / i;
+                massCenter[0] = massCenter[0].divide(new BigDecimal(String.valueOf(i)), 1, ROUND_HALF_UP);
+                massCenter[1] = massCenter[1].divide(new BigDecimal(String.valueOf(i)), 1, ROUND_HALF_UP);
                 break;
             }
         }
@@ -130,8 +140,8 @@ public class MyUtils {
         locationOnBluetoothNew[1] = Double.valueOf(locationOnBluetoothNewString.split(",")[1]);
         if(timeDiff < 2000) {
             double[] vectorBasedOnBluetooth = {locationOnBluetoothNew[0] - locationOnBluetoothOld[0], locationOnBluetoothNew[1] - locationOnBluetoothOld[1]};
-            double[] locationOldSensor = searchTimeList(timeLast, listOfTimeSensor, "cutFromOldTime");
-            double[] locationNewSensor = searchTimeList(currentMillisecond, listOfTimeSensor, "dontCut");
+            double[] locationOldSensor = searchTimeListForSensor(timeLast, listOfTimeSensor, "cutFromOldTime");
+            double[] locationNewSensor = searchTimeListForSensor(currentMillisecond, listOfTimeSensor, "dontCut");
             double[] vectorBasedOnSensor = {locationNewSensor[0] - locationOldSensor[0], locationNewSensor[1] - locationOldSensor[1]};
 
             double angle = MyUtils.getVectorAngle(vectorBasedOnBluetooth, vectorBasedOnSensor);
@@ -210,7 +220,7 @@ public class MyUtils {
     }
 
     //寻找列表中与传入时间最接近的时间，返回这个时间对应的坐标。维持时间和位置列表的长度不至于过长
-    public static double[] searchTimeList(long time, ArrayList<Long> listOfTimeSensor, String howToDealWithTimeList){
+    public static double[] searchTimeListForSensor(long time, ArrayList<Long> listOfTimeSensor, String howToDealWithTimeList){
         long theDiff = 1000000;
         int j = 0;
         for(int i = 0; i<listOfTimeSensor.size(); i++){
@@ -235,6 +245,18 @@ public class MyUtils {
             }
         }
         return testReturn;
+    }
+
+    public static int searchTimeList(LongSparseArray map, long time){
+        int j = 0;
+        for(int i = 0; i < map.size(); i++){
+            if(map.keyAt(i) < time){
+                j = i;
+            }else{
+                break;
+            }
+        }
+        return j;
     }
 
 
