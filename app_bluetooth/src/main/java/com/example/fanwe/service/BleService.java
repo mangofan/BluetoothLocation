@@ -69,7 +69,6 @@ public class BleService extends Service {
                     if (ShowMapActivityFragment.bleNodeLoc.containsKey(mac)) {
                         String macRssi = mac + "," + rssi;
                         bleListener.onBleComing(macRssi);
-//                        Log.d(TAG, macRssi);
                     }
                 }
             }
@@ -101,6 +100,10 @@ public class BleService extends Service {
         }
     }
 
-
+    @Override
+    public void onDestroy() {
+        super.onDestroy();
+        bluetoothLeScanner.stopScan(leCallback);
+    }
 
 }

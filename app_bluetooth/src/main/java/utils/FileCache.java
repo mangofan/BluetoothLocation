@@ -13,7 +13,7 @@ import java.io.IOException;
 public class FileCache {
     public static synchronized  void saveFile(String saveString){
 
-        File f = new File(Environment.getExternalStorageDirectory(),"/download/db_mainStream.txt");
+        File f = new File(Environment.getExternalStorageDirectory(),"/download/db.txt");
         FileOutputStream out =null;
         try {
             out =new FileOutputStream(f,true);

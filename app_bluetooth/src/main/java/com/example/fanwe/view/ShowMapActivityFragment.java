@@ -10,7 +10,6 @@ import android.hardware.Sensor;
 import android.hardware.SensorEvent;
 import android.hardware.SensorEventListener;
 import android.hardware.SensorManager;
-import android.nfc.Tag;
 import android.os.Bundle;
 import android.os.IBinder;
 import android.support.v4.app.Fragment;
@@ -31,8 +30,6 @@ import org.greenrobot.eventbus.EventBus;
 import org.greenrobot.eventbus.Subscribe;
 import org.greenrobot.eventbus.ThreadMode;
 
-import java.math.BigDecimal;
-import java.math.RoundingMode;
 import java.util.ArrayList;
 import java.util.Calendar;
 import java.util.HashMap;
@@ -42,68 +39,66 @@ import utils.FileCache;
 import utils.MyUtils;
 
 import static android.app.Activity.RESULT_OK;
-import static android.content.ContentValues.TAG;
-import static android.support.v7.appcompat.R.id.time;
 import static com.example.fanwe.bluetoothlocation.R.id.textView;
 import static com.example.fanwe.bluetoothlocation.R.id.textView1;
 import static com.example.fanwe.bluetoothlocation.R.id.textView2;
+import static com.example.fanwe.bluetoothlocation.R.id.textView4;
+import static com.example.fanwe.bluetoothlocation.R.id.textView5;
+import static com.example.fanwe.bluetoothlocation.R.id.textView6;
 import static com.example.fanwe.bluetoothlocation.R.id.webview;
 import static com.example.fanwe.view.ShowMapActivity.bluetoothAdapter;
 
 // TODO: 2017/5/9 增加上慢速移动坐标点的代码
 // TODO: 2017/5/11 发热量大，减少计算量
+
 public class ShowMapActivityFragment extends Fragment implements Cloneable {
 
     private static final int ENABLE_BLUETOOTH = 1;
     public static Map<String, String> bleNodeLoc = new HashMap<>();    //固定节点的位置Map
-    float angleBias = 19f;  //建筑物方向与正北向的夹角，建筑物方向是正北向的的北偏东多少度。
+//    float angleBias = 19f;  //建筑物方向与正北向的夹角，建筑物方向是正北向的的北偏东多少度。
     WebView webView;
-    TextView mTextAcc, mTextGyro, mTexthh;
+    TextView mTextAcc, mTextGyro, mTexthh, mTextMass, mTextVar;
     int RSSI_LIMIT = 5, BLE_CHOOSED_NUM = 4;
     SensorManager sensorManager;
 
     //蓝牙有关的参数
     long timeLast;
-    String locationLast, bleLocationLast ;   //上次或者本次的确定位置
-    int RECENT_LIMIT = 8;
-    int TARGET_TIME = 1500, TIME_INTERVAL = 1000, LIMIT_REAPPEAR = 10;
+    String location;   //上次或者本次的确定位置
+    int TIME_INTERVAL = 1000;
     StringBuffer stringBuffer1 = new StringBuffer();
-    StringBuffer stringBuffer2 = new StringBuffer();
     Map<String, ArrayList<Double>> mAllRssi = new HashMap<>();    //储存RSSI的MAP
     Map<String, Double> mRssiFilterd = new HashMap<>();     //过滤后的RSSI的Map
     Map<String, Float> bleNodeRssiBias = new HashMap<>();   //节点信号强度的偏差值Map
+    Map<String, ArrayList<String>> massCenter = new HashMap<>();
     LongSparseArray<String> recentLocationMapRaw = new LongSparseArray<>();
     LongSparseArray<String> locationMapOfOneSec = new LongSparseArray<>();
 
     //传感器有关的参数
-    float[] rotationMatrix = new float[9];
-    ArrayList<Long> listOfTimeSensor = new ArrayList<>();
-    ArrayList<Double> listOfOrientation = new ArrayList<>();
-    int conutForInitialize = 0;   //标志是否第一次进入传感器确认函数，如果为第一次，值为零；否则值为1
-    double[] rotVecValues = {0, 0, 0, 0}, accValues = {0, 0, 0}, gyroValues = {0, 0, 0};
+
+//    float[] rotationMatrix = new float[9];
+    long lastTimeOfSensor ;
+//    ArrayList<Double> listOfOrientation = new ArrayList<>();
+    int countForInitialize = 0;   //标志是否第一次进入传感器确认函数，如果为第一次，值为零；否则值为1
+//    double[] rotVecValues = {0, 0, 0, 0}, accValues = {0, 0, 0}, gyroValues = {0, 0, 0};
     SparseArray<ArrayList<Double>> accValueList = new SparseArray<>();   //维持一定时间内的加速计历次读数的列表
 
     int sensorCount = 0;
     private BleService bleService;
-    //建立Activity和service之间的连接
-    private ServiceConnection mConnection = new ServiceConnection() {
+
+    private ServiceConnection mConnection = new ServiceConnection() {   //建立Activity和service之间的连接
         @Override
         public void onServiceConnected(ComponentName name, IBinder service) {
-            //连接时调用,返回一个BleService对象
-            bleService = ((BleService.MyBinder) service).getService();
-
-            //注册回调接口来接收蓝牙信息
+            bleService = ((BleService.MyBinder) service).getService();  //连接时调用,返回一个BleService对象
             bleService.setBleListener(new BleListener() {
                 @Override
                 public void onBleComing(String mac) {
                     handleMessage(mac);
                 }
-            });
+            });  //注册回调接口来接收蓝牙信息
         }
 
         @Override
-        public void onServiceDisconnected(ComponentName name) {
-            //service意外断开时接收
+        public void onServiceDisconnected(ComponentName name) {   //service意外断开时接收
             bleService = null;
         }
     };
@@ -113,18 +108,18 @@ public class ShowMapActivityFragment extends Fragment implements Cloneable {
         @Override
         public void onSensorChanged(SensorEvent event) {
             switch (event.sensor.getType()) {
-                case Sensor.TYPE_ROTATION_VECTOR:
-                    float[] rotVecValuesCopy = event.values.clone();
-                    rotVecValues[0] = rotVecValuesCopy[0];
-                    rotVecValues[1] = rotVecValuesCopy[1];
-                    rotVecValues[2] = rotVecValuesCopy[2];
-                    rotVecValues[3] = rotVecValuesCopy[3];
-                    SensorManager.getRotationMatrixFromVector(rotationMatrix, rotVecValuesCopy);
-                    float[] orientation = new float[3];
-                    SensorManager.getOrientation(rotationMatrix, orientation);
-                    double angleFixed = MyUtils.getAngleFixed(orientation[0], angleBias);
-                    listOfOrientation.add(angleFixed);
-                    break;
+//                case Sensor.TYPE_ROTATION_VECTOR:
+//                    float[] rotVecValuesCopy = event.values.clone();
+//                    rotVecValues[0] = rotVecValuesCopy[0];
+//                    rotVecValues[1] = rotVecValuesCopy[1];
+//                    rotVecValues[2] = rotVecValuesCopy[2];
+//                    rotVecValues[3] = rotVecValuesCopy[3];
+//                    SensorManager.getRotationMatrixFromVector(rotationMatrix, rotVecValuesCopy);
+//                    float[] orientation = new float[3];
+//                    SensorManager.getOrientation(rotationMatrix, orientation);
+//                    double angleFixed = MyUtils.getAngleFixed(orientation[0], angleBias);
+//                    listOfOrientation.add(angleFixed);
+//                    break;
 //                case Sensor.TYPE_GYROSCOPE:
 //                    float[] gyroValuesCopy = event.values.clone();
 //                    gyroValues = MyUtils.filterGyroValue(gyroValuesCopy);
@@ -138,10 +133,11 @@ public class ShowMapActivityFragment extends Fragment implements Cloneable {
 ////                    accValues = MyUtils.filterAccValues(accCopy,accValueList);
 //                    break;
                 case Sensor.TYPE_STEP_DETECTOR:
-                    MyUtils.makeOneStepProcess(listOfOrientation, listOfTimeSensor);
                     sensorCount += 1;
                     String hh = sensorCount + "";
                     mTextAcc.setText(hh);
+                    lastTimeOfSensor = Calendar.getInstance().getTimeInMillis();
+//                    MyUtils.makeOneStepProcess(listOfOrientation, lastTimeOfSensor);
                     break;
             }
         }
@@ -161,8 +157,6 @@ public class ShowMapActivityFragment extends Fragment implements Cloneable {
         Double rssi = Double.valueOf(macAndRssi[1]);
 
 
-        Calendar calendar = Calendar.getInstance();
-        long nowTime = calendar.getTimeInMillis();
         if (bleNodeRssiBias.containsKey(remoteMac)) {
             rssi += bleNodeRssiBias.get(remoteMac);
         }
@@ -174,57 +168,69 @@ public class ShowMapActivityFragment extends Fragment implements Cloneable {
             list.add(rssi);   //如果这个MAC地址没有出现过，建立list存储历次rssi
             mAllRssi.put(remoteMac, list);
         }
-        String need = remoteMac + " " + rssi + "\n";
-//        Log.d("hh", need);
+        String need = mac.split(":")[5] + "\n";
+        Log.d("hh", need);
         double getAvgOfFilterdRssiValueList = MyUtils.LogarNormalDistribution(mAllRssi.get(remoteMac), RSSI_LIMIT);  //获取滤波后的信号强度表和强度平均值
         mRssiFilterd.put(remoteMac, getAvgOfFilterdRssiValueList);   //更新MAC地址对应信号强度的map
-        if (mRssiFilterd.size() > 2) {
+        if (mRssiFilterd.size() > 1) {
             SparseArray<ArrayList<String>> SortedNodeMacAndRssi = MyUtils.sortNodeBasedOnRssi(mRssiFilterd, BLE_CHOOSED_NUM);     //得到按距离排序的蓝牙节点的列表
-            String locationOnBluetooth = MyUtils.getMassCenter(SortedNodeMacAndRssi, bleNodeLoc);   //通过质心定位得到位置
+            String[] locationOnBluetoothTemp = MyUtils.getMassCenter(SortedNodeMacAndRssi, bleNodeLoc).split(":");   //通过质心定位得到位置
+            mTextVar.setText(locationOnBluetoothTemp[1]);
+
+            String locationOnBluetooth = locationOnBluetoothTemp[0];
+            long nowTime = Calendar.getInstance().getTimeInMillis();
             recentLocationMapRaw.put(nowTime, locationOnBluetooth);   //将每次蓝牙算出的质心位置的放入map中
-            if (conutForInitialize == 1) {     //判断是否为第一次进入函数
-                locationOnBluetooth = getRecentConfirm(nowTime, locationOnBluetooth, bleLocationLast);
-                bleLocationLast = locationOnBluetooth;
-                webView.loadUrl(setInsetJS(Double.valueOf(locationOnBluetooth.split(",")[0]) + "", Double.valueOf(locationOnBluetooth.split(",")[1]) + "", "circle_point2"));
-                if (!(locationOnBluetooth.equals(locationLast))) {    //当新出现的节点与上一个定位点不相同时
-                    String locationSensorConfirmed = MyUtils.getSensorConfirm(locationLast, locationOnBluetooth, timeLast, nowTime, listOfTimeSensor);
-                    if (!(locationSensorConfirmed.equals(locationLast))) {    //仅当定位点发生变化时，才修改记录的定位点和定位时间
-                        timeLast = nowTime;
-                        locationLast = locationSensorConfirmed;   //此时的locationLast就是这次的真正位置，
+            
+            if (countForInitialize == 1) {     //判断是否为第一次进入函数
+                locationOnBluetooth = getRecentConfirm(location);
+                int flag = MyUtils.getSensorState(nowTime, lastTimeOfSensor, locationOnBluetooth);
+                String needMassCenter = "";
+                if(flag == MyUtils.MOVING){
+                    location = locationOnBluetooth;   //如果在运动中，就使用运动中计算出来的
+                    needMassCenter = "MOVING";
+                } else {
+                    massCenter = MyUtils.getStandLocation();
+                    location = massCenter.get("massCenter").get(0) + "," + massCenter.get("massCenter").get(1);//不在运动中就将这段时间的坐标求平均
+                    ArrayList<String> x = massCenter.get("x");
+                    ArrayList<String> y = massCenter.get("y");
+                    needMassCenter = "STANDING" + "\n";
+                    for(int i = 0; i < x.size(); i++){
+                        needMassCenter += x.get(i) + "," + y.get(i) + "\n";
                     }
                 }
+                mTextMass.setText(needMassCenter);
             } else {   //第一次进入函数时
-                locationOnBluetooth = getRecentConfirm(nowTime, locationOnBluetooth, "first time");
-                webView.loadUrl(setInsetJS(Double.valueOf(locationOnBluetooth.split(",")[0]) + "", Double.valueOf(locationOnBluetooth.split(",")[1]) + "", "circle_point2"));
-                locationLast = locationOnBluetooth;
-                bleLocationLast = locationOnBluetooth;
-                timeLast = nowTime;
-                conutForInitialize = 1;
+                locationOnBluetooth = getRecentConfirm("first time");
+                location = locationOnBluetooth;
+                countForInitialize = 1;
             }
+            mTexthh.setText(locationOnBluetooth);
             stringBuffer1.append(locationOnBluetooth);
             stringBuffer1.append("\n");
-            double[] locationLastDouble = new double[2];
-            locationLastDouble[0] = Double.valueOf(locationLast.split(",")[0]);
-            locationLastDouble[1] = Double.valueOf(locationLast.split(",")[1]);
-            webView.loadUrl(setInsetJS(locationLastDouble[0] + "", locationLastDouble[1] + "", "circle_point"));
+
+            webView.loadUrl(setInsetJS(Double.valueOf(location.split(",")[0]) + "", Double.valueOf(location.split(",")[1]) + "", "circle_point"));
             for (int i = 0; i < SortedNodeMacAndRssi.get(1).size(); i++) {
-                need += SortedNodeMacAndRssi.get(1).get(i) + " " + SortedNodeMacAndRssi.get(2).get(i) + "\n";
+                need += SortedNodeMacAndRssi.get(1).get(i).split(":")[5] + " " + SortedNodeMacAndRssi.get(2).get(i) + "\n";
             }
             mTextGyro.setText(need);
         }
     }
 
+
+
+
+
     //根据最近几次确定的位置，应当排除的情况是定位点出现ABA这种来回的情况时, 要求几秒之内，定位的轨迹应该是一条线，不应该成环，即出现ABA这种情况，这种时候应该过滤掉B
-    public String getRecentConfirm(long time, String locationOnBluetooth, String locationLast) {
+    public String getRecentConfirm(String location) {
         long startTime = recentLocationMapRaw.keyAt(0);  //map中存在的最早的时间
         long endTime = recentLocationMapRaw.keyAt(recentLocationMapRaw.size() - 1);  //map中存在最晚的时间
         long stopTime = endTime - 1000;  //本次工作停止的时间,也是下次开始的时间
 
+        if(location.equals("first time")){
+            return recentLocationMapRaw.get(endTime);
+        }
         if(stopTime < startTime){
-            if(locationLast.equals("first time")){
-                return recentLocationMapRaw.get(endTime);   //如果整个map中的时间短于1秒，返回map中最新的地址。
-            }else
-                return locationLast;
+            return location;  //如果整个map中的时间短于1秒，返回map中最新的地址。
         }
 
         for(int i = 0; recentLocationMapRaw.keyAt(i) < stopTime; i++){  //对map中每个值，向后数一秒，计算这一秒内的位置，存入locationMapOfOneSec
@@ -249,13 +255,13 @@ public class ShowMapActivityFragment extends Fragment implements Cloneable {
             } else {
                 flag = locationMapOfOneSec.valueAt(i);
                 count = 1;
+                for(int j = i-1 ; j > 0; j--){   //当flag值出现变化时，将之前的节点全部去掉，节省下次进入的遍历花费
+                    locationMapOfOneSec.removeAt(j);
+                }
+                i = 0;
             }
         }
-
-        if(locationLast.equals("first time")){
-            return recentLocationMapRaw.get(endTime);   //如果整个map中的时间短于1秒，返回map中最新的地址。
-        } else
-            return locationLast;
+        return location;
 
     }
 
@@ -268,6 +274,8 @@ public class ShowMapActivityFragment extends Fragment implements Cloneable {
         mTextAcc = (TextView) root.findViewById(textView1);
         mTextGyro = (TextView) root.findViewById(textView2);
         mTexthh = (TextView)root.findViewById(textView);
+        mTextMass = (TextView)root.findViewById(textView4);
+        mTextVar = (TextView)root.findViewById(textView6);
         initWebview();
         initlocation();
         initSensor();
@@ -325,7 +333,7 @@ public class ShowMapActivityFragment extends Fragment implements Cloneable {
 //        sensorManager.registerListener(listener, accSensor, SensorManager.SENSOR_DELAY_GAME);
 //        sensorManager.registerListener(listener, gyroSensor, SensorManager.SENSOR_DELAY_GAME);
         sensorManager.registerListener(listener, stepSensor, SensorManager.SENSOR_DELAY_GAME);
-        listOfTimeSensor.add(Calendar.getInstance().getTimeInMillis());    //初始化时给时间列表填充第一个元素
+        lastTimeOfSensor = Calendar.getInstance().getTimeInMillis();    //初始化时给时间列表填充第一个元素
     }
 
     //对加速计过滤时用到的sparsearray的初始化
@@ -340,27 +348,26 @@ public class ShowMapActivityFragment extends Fragment implements Cloneable {
     //初始化已知蓝牙节点信息
     void initlocation() {
 
-        String location21 = 11.5 + "," + 0.7;
-        String location22 = 15.8 + "," + 0.7;
-        String location23 = 7.8 + "," + 4.7;
-        String location24 = 11.8 + "," + 4.7;
-        String location25 = 15.8 + "," + 4.7;
-        String location26 = 19.8 + "," + 4.7;
-        String location27 = 7.8 + "," + 8.7;
-        String location28 = 11.8 + "," + 8.7;
-        String location29 = 15.8 + "," + 8.7;
-        String location30 = 19.8 + "," + 8.7;
+        String location21 = 14.17 + "," + 0.8;
+        String location22 = 8.47 + "," + 4.7;
+        String location23 = 14.17 + "," + 8.7;
+        String location24 = 19.13 + "," + 5.37;
+
+        String location25 = 24 + "," + 14.93;
+        String location28 = 16 + "," + 14.93;
+        String location37 = 8 + "," + 14.93;
+        String location30 = 0 + "," + 14.93;
+
 
         bleNodeLoc.put("19:18:FC:01:F1:0E", location21);
         bleNodeLoc.put("19:18:FC:01:F1:0F", location22);
         bleNodeLoc.put("19:18:FC:01:F0:F8", location23);
         bleNodeLoc.put("19:18:FC:01:F0:F9", location24);
         bleNodeLoc.put("19:18:FC:01:F0:FA", location25);
-        bleNodeLoc.put("19:18:FC:01:F0:FB", location26);
-        bleNodeLoc.put("19:18:FC:01:F0:FC", location27);
         bleNodeLoc.put("19:18:FC:01:F0:FD", location28);
-        bleNodeLoc.put("19:18:FC:01:F0:FE", location29);
         bleNodeLoc.put("19:18:FC:01:F0:FF", location30);
+        bleNodeLoc.put("19:18:FC:00:82:98", location37);
+
 
 //        bleNodeRssiBias.put("19:18:FC:01:F1:0E", 6f);
 //        bleNodeRssiBias.put("19:18:FC:01:F1:0F", 5f);
@@ -389,11 +396,6 @@ public class ShowMapActivityFragment extends Fragment implements Cloneable {
         webView.loadUrl("file:///android_asset/svg/10072_1.html");
     }
 
-    @Override
-    public void onPause() {
-//       sensorManager.unregisterListener(listener);
-        super.onPause();
-    }
 
     @Override
     public void onResume() {
@@ -412,8 +414,8 @@ public class ShowMapActivityFragment extends Fragment implements Cloneable {
         });
         thread.start();
         EventBus.getDefault().unregister(this);
+        getActivity().unbindService(mConnection);
         getActivity().stopService(new Intent(this.getActivity(), BleService.class));
-        Log.d("hh","service stop");
         super.onDestroy();
     }
 
