@@ -22,10 +22,12 @@ public class MyUtils {
     public static int MOVING = 0, STANDING = 1;
     private static double Sx = 14.0, Sy = 0.0;
 
+
 //    private static Double[] accBias = {0.0,0.0,0.0};
     private static LongSparseArray<double[]> locationBasedOnSensor = new LongSparseArray<>();
     private static ArrayList<String> locationListForStandx = new ArrayList<>();
     private static ArrayList<String> locationListForStandy = new ArrayList<>();
+    private static ArrayList<Long> timeStepList = new ArrayList<>();
 
     // 计步发生3秒以上时，对维护的位置列表求平均
     public static Map<String,ArrayList<String>> getStandLocation(){
@@ -46,6 +48,7 @@ public class MyUtils {
     // 根据计步器，区分现在是在移动还是已经停止不动；维护一个列表，存储计步发生后所有的位置，当出现新的计步之后，表清空，重新维护，为了静止时可以对发生的位置求平均。
     public static int getSensorState(long nowTime, long lastTimeOfSensor, String newLocation){
         if(lastTimeOfSensor != lastTimeOfSensorFlag) {
+            timeStepList.add(lastTimeOfSensor);
             lastTimeOfSensorFlag = lastTimeOfSensor;
             locationListForStandx.clear();
             locationListForStandy.clear();
@@ -55,8 +58,7 @@ public class MyUtils {
         locationListForStandy.add(0,location[1]);
 
         int toReturn;
-        int stepCountNotUpdateLast = 3000;
-        if((nowTime - lastTimeOfSensor) > stepCountNotUpdateLast){   //如果当前时刻与计步器最后更新的步数的时刻相差3秒以上，认为这段时间没有移动
+        if((nowTime - lastTimeOfSensor) > 3000){   //如果当前时刻与计步器最后更新的步数的时刻相差3秒以上，认为这段时间没有移动
             toReturn = STANDING;
         }else{
             toReturn =  MOVING;
@@ -92,6 +94,7 @@ public class MyUtils {
     //使用质心定位得到坐标,使用BigDecimal来减少将6.7表示为6.6999999999的情况
     public static String getMassCenter(SparseArray<ArrayList<String>> SortedNodeMacAndRssi, Map<String, String> bleNodeLoc) {
         double varianceLimit = 27;   //对于方差的限制
+        int flag;
         ArrayList<String> SortedNodeMacList = SortedNodeMacAndRssi.get(1);   //获取排好序的节点的MAC地址的列表
         ArrayList<String> SortedNodeRssiList = SortedNodeMacAndRssi.get(2);  //获取排好序的节点的RSSI地址的列表
         int size = SortedNodeRssiList.size();
@@ -99,20 +102,55 @@ public class MyUtils {
         massCenter[0] = 0.0;
         massCenter[1] = 0.0;
 
-        double variance = getVariance(SortedNodeRssiList,"not sure");
-        if (variance < varianceLimit) {
-            for (int j = 0; j < size; j++) {
-                String[] location = bleNodeLoc.get(SortedNodeMacList.get(j)).split(",");
-                massCenter[0] = massCenter[0] + Double.valueOf(location[0]);
-                massCenter[1] = massCenter[1] + Double.valueOf(location[1]);
-            }
-            BigDecimal massCenter0 = new BigDecimal(massCenter[0]).divide(new BigDecimal(size), 1, ROUND_HALF_UP);
-            BigDecimal massCenter1 = new BigDecimal(massCenter[1]).divide(new BigDecimal(size), 1, ROUND_HALF_UP);
-            return massCenter0 + "," + massCenter1 + ":" + variance;
+        ArrayList<double[]> nearestMacLoc = new ArrayList<>();  //将排好序的节点的坐标存起来
+        for(int i = 0; i < size; i++){
+            String[] location = bleNodeLoc.get(SortedNodeMacList.get(i)).split(",");
+            double[] loc = new double[2];
+            loc[0] = Double.valueOf(location[0]);
+            loc[1] = Double.valueOf(location[1]);
+            nearestMacLoc.add(loc);
+        }
+
+        if(size > 2){
+            flag = judgeIfLine(nearestMacLoc);
+        }else
+            return nearestMacLoc.get(0)[0] + "," + nearestMacLoc.get(0)[1];
+
+        if (flag == 1){   //flag为1时，说明共线，为0时说明不共线
+            massCenter[0] = (nearestMacLoc.get(0)[0] + nearestMacLoc.get(1)[0]) / 2;
+            massCenter[1] = (nearestMacLoc.get(0)[1] + nearestMacLoc.get(1)[1]) / 2;
+            return massCenter[0] + "," + massCenter[1] + ":" + "line";
         }else{
-            return bleNodeLoc.get(SortedNodeMacList.get(0)) + ":" + variance;
+            double variance = getVariance(SortedNodeRssiList,"not sure");
+            if (variance < varianceLimit) {
+                for (int j = 0; j < size; j++) {
+                    double[] loc = nearestMacLoc.get(j);
+                    massCenter[0] = massCenter[0] + loc[0];
+                    massCenter[1] = massCenter[1] + loc[1];
+                }
+                BigDecimal massCenter0 = new BigDecimal(massCenter[0]).divide(new BigDecimal(size), 1, ROUND_HALF_UP);
+                BigDecimal massCenter1 = new BigDecimal(massCenter[1]).divide(new BigDecimal(size), 1, ROUND_HALF_UP);
+                return massCenter0 + "," + massCenter1 + ":" + variance;
+            }else{
+                return bleNodeLoc.get(SortedNodeMacList.get(0)) + ":" + variance;
+            }
         }
     }
+
+    private static int judgeIfLine(ArrayList<double[]> nearestMacLoc){
+        double[] vec1 = new double[2];
+        double[] vec2 = new double[2];
+        vec1[0] = nearestMacLoc.get(0)[0] - nearestMacLoc.get(1)[0];
+        vec1[1] = nearestMacLoc.get(0)[1] - nearestMacLoc.get(1)[1];
+        vec2[0] = nearestMacLoc.get(0)[0] - nearestMacLoc.get(2)[0];
+        vec2[1] = nearestMacLoc.get(0)[1] - nearestMacLoc.get(2)[1];
+        double cos = (vec1[0] * vec2[0] + vec1[1] * vec2[1]) / (Math.sqrt(vec1[0]*vec1[0] + vec1[1]*vec1[1]) * Math.sqrt(vec2[0]*vec2[0] + vec2[1]*vec2[1]));
+        if((0.9 < cos) & (cos< 1.1))    //共线
+            return 1;
+        else
+            return 0;   //不共线
+    }
+
 
     public static int searchTimeList(LongSparseArray map, long time){
         int j = 0;
@@ -127,13 +165,13 @@ public class MyUtils {
     }
 
     //根据RSSI强度，对MAC地址排序
-    public static SparseArray<ArrayList<String>> sortNodeBasedOnRssi(Map<String, Double> mRssiFilterd, int BLE_CHOOSED_NUM) {
-        List<Map.Entry<String, Double>> infoIds = new ArrayList<>(mRssiFilterd.entrySet());
+    public static SparseArray<ArrayList<String>> sortNodeBasedOnRssi(Map<String, Double> rssiAvg, int BLE_CHOOSED_NUM) {
+        List<Map.Entry<String, Double>> infoIds = new ArrayList<>(rssiAvg.entrySet());
         ArrayList<String> listOfMac = new ArrayList<>();
         ArrayList<String> listOfRssi = new ArrayList<>();
         ArrayList<String> listOfMacAndRssi = new ArrayList<>();
         String MacAndRssi = "";
-        int limit = BLE_CHOOSED_NUM < mRssiFilterd.size() ? BLE_CHOOSED_NUM : mRssiFilterd.size();
+        int limit = BLE_CHOOSED_NUM < rssiAvg.size() ? BLE_CHOOSED_NUM : rssiAvg.size();
 
         Collections.sort(infoIds, new Comparator<Map.Entry<String, Double>>() {        //排序
             public int compare(Map.Entry<String, Double> o1, Map.Entry<String, Double> o2) {
@@ -236,7 +274,7 @@ public class MyUtils {
             }
             return getAvgBigDecimal(dataToGetAvg);
         }else             //取值的标准差为零时，直接返回平均值
-            return getAvgBigDecimal(mAllRssilist);
+            return mAllRssilist.get(0);
     }
 
     //对ArrayList每个值取对数，以应用于对数正态运算的函数
@@ -609,7 +647,7 @@ public class MyUtils {
 //    //初始化需要加同步锁的变量
 //    private void initSynchronize() {
 //        mAllRssi = Collections.synchronizedMap(mAllRssi);
-//        mRssiFilterd = Collections.synchronizedMap(mRssiFilterd);
+//        rssiAvg = Collections.synchronizedMap(rssiAvg);
 //    }
 
 //从MAP中选出 list中元素作为键，对应的键值对
