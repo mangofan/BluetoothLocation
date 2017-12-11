@@ -46,22 +46,28 @@ public class MyUtils {
     }
 
     // 根据计步器，区分现在是在移动还是已经停止不动；维护一个列表，存储计步发生后所有的位置，当出现新的计步之后，表清空，重新维护，为了静止时可以对发生的位置求平均。
-    public static int getSensorState(long nowTime, long lastTimeOfSensor, String newLocation){
-        if(lastTimeOfSensor != lastTimeOfSensorFlag) {
-            timeStepList.add(lastTimeOfSensor);
-            lastTimeOfSensorFlag = lastTimeOfSensor;
-            locationListForStandx.clear();
-            locationListForStandy.clear();
-        }
+    public static int getSensorState(long nowTime, List<Long> listTimeOfSensor, String newLocation){
         String[] location = newLocation.split(",");
         locationListForStandx.add(0,location[0]);
         locationListForStandy.add(0,location[1]);
 
+        long nearestSensorTime = searchTimeList(nowTime, listTimeOfSensor);
         int toReturn;
-        if((nowTime - lastTimeOfSensor) > 3000){   //如果当前时刻与计步器最后更新的步数的时刻相差3秒以上，认为这段时间没有移动
+        if((nowTime - nearestSensorTime) > 3000){   //如果当前时刻与计步器最后更新的步数的时刻相差3秒以上，认为这段时间没有移动
             toReturn = STANDING;
         }else{
             toReturn =  MOVING;
+        }
+        return toReturn;
+    }
+
+    private static long searchTimeList(long time, List<Long> list){
+        long toReturn = list.get(list.size()-1);   //这个初始化是为了用于time大于列表中任意时间时
+        for(int i=0; i<list.size(); i++){
+            if(list.get(i) > time){
+                toReturn = list.get(i-1);    //因为最初初始化时，初始化了传感器最初时间，后来的蓝牙信号时间绝对不会早于应用初始化时间，也就是list.get(0)<time必然成立
+                break;
+            }
         }
         return toReturn;
     }
@@ -152,7 +158,7 @@ public class MyUtils {
     }
 
 
-    public static int searchTimeList(LongSparseArray map, long time){
+    public static int searchTimeMap(LongSparseArray map, long time){
         int j = 0;
         for(int i = 0; i < map.size(); i++){
             if(map.keyAt(i) < time){

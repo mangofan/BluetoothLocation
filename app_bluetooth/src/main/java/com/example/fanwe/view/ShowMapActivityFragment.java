@@ -33,6 +33,7 @@ import org.greenrobot.eventbus.ThreadMode;
 import java.util.ArrayList;
 import java.util.Calendar;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 import utils.FileCache;
@@ -71,6 +72,8 @@ public class ShowMapActivityFragment extends Fragment implements Cloneable {
     Map<String, ArrayList<String>> massCenter = new HashMap<>();
     LongSparseArray<String> recentLocationMapRaw = new LongSparseArray<>();
     LongSparseArray<String> locationMapOfOneSec = new LongSparseArray<>();
+    List<Long> listStepTime = new ArrayList<>();
+
 
     //传感器有关的参数
     int sensorCount = 0;
@@ -111,6 +114,7 @@ public class ShowMapActivityFragment extends Fragment implements Cloneable {
                     String hh = sensorCount + "";
                     mTextAcc.setText(hh);
                     lastTimeOfSensor = Calendar.getInstance().getTimeInMillis();
+                    listStepTime.add(lastTimeOfSensor);  //将脚步发生的时间存到列表
 //                    MyUtils.makeOneStepProcess(listOfOrientation, lastTimeOfSensor);
                     break;
                 //                case Sensor.TYPE_ROTATION_VECTOR:
@@ -178,10 +182,14 @@ public class ShowMapActivityFragment extends Fragment implements Cloneable {
             recentLocationMapRaw.put(nowTime, locationOnBluetooth);   //将每次蓝牙算出的质心位置的放入map中
             
             if (countForInitialize == 1) {     //判断是否为第一次进入函数
-                if(getRecentConfirm(lastLoc) != null) {    //如果接受到的数据时间跨度不足1秒，无法完成滤波，则继续接收信号，跨度长于1秒时继续进行处理
-                    lastLoc = locationOnBluetooth;
-                    int flag = MyUtils.getSensorState(nowTime, lastTimeOfSensor, locationOnBluetooth);
-                    String needMassCenter = "";
+                String recentFilterTimeAndLocation = getRecentConfirm(lastLoc);  //经过最终滤波之后，返回的位置和对应的时间
+                if(recentFilterTimeAndLocation != null) {    //如果接受到的数据时间跨度不足1秒，无法完成滤波，则继续接收信号，跨度长于1秒时继续进行处理
+                    String[] timeAndLoc = recentFilterTimeAndLocation.split(",");
+                    long time = Long.valueOf(timeAndLoc[0]);
+                    String loc = timeAndLoc[1];
+                    lastLoc = loc;
+                    int flag = MyUtils.getSensorState(time, listStepTime, loc);
+                    String needMassCenter;
                     if (flag == MyUtils.MOVING) {
                         location = locationOnBluetooth;   //如果在运动中，就使用运动中计算出来的
                         needMassCenter = "MOVING";
@@ -197,9 +205,6 @@ public class ShowMapActivityFragment extends Fragment implements Cloneable {
                     }
                     mTextMass.setText(needMassCenter);
                 }
-
-
-                问题在于蓝牙获得的是1秒之前的位置，而传感器是实时的消息，所以两者不匹配，解决方案：对每个时刻的最终确定位置进行确定，存在一个列表中，有另一个函数专门用来显示位置
             } else {   //第一次进入函数时
                 location = locationOnBluetooth;
                 lastLoc = locationOnBluetooth;
@@ -220,17 +225,20 @@ public class ShowMapActivityFragment extends Fragment implements Cloneable {
 
 
     //根据最近几次确定的位置，应当排除的情况是定位点出现ABA这种来回的情况时, 要求几秒之内，定位的轨迹应该是一条线，不应该成环，即出现ABA这种情况，这种时候应该过滤掉B
+    //滤波时长小于1秒时，返回null
     public String getRecentConfirm(String location) {
         long startTime = recentLocationMapRaw.keyAt(0);  //map中存在的最早的时间
         long endTime = recentLocationMapRaw.keyAt(recentLocationMapRaw.size() - 1);  //map中存在最晚的时间
         long stopTime = endTime - 1000;  //本次工作停止的时间,也是下次开始的时间
+        long time; //有返回值时，认为返回值对应的时刻
+
 
         if(stopTime < startTime){
             return null;  //如果整个map中的时间短于1秒，返回null， 期待更多结果。
         }
 
         for(int i = 0; recentLocationMapRaw.keyAt(i) < stopTime; i++){  //对map中每个值，向后数一秒，计算这一秒内的位置，存入locationMapOfOneSec
-            int thisTimeEndIndex = MyUtils.searchTimeList(recentLocationMapRaw, recentLocationMapRaw.keyAt(i) + TIME_INTERVAL);  //查找本次循环中的结束时间的index
+            int thisTimeEndIndex = MyUtils.searchTimeMap(recentLocationMapRaw, recentLocationMapRaw.keyAt(i) + TIME_INTERVAL);  //查找本次循环中的结束时间的index
             String loc = MyUtils.findTheLoc(i, thisTimeEndIndex, recentLocationMapRaw);  //求这段时间内，出现次数最多的位置
             locationMapOfOneSec.put((recentLocationMapRaw.keyAt(i) + HALF_TIME_INTERVAL), loc);  //将每次算出来的位置存入map
             recentLocationMapRaw.removeAt(i);
@@ -243,11 +251,12 @@ public class ShowMapActivityFragment extends Fragment implements Cloneable {
             if (locationMapOfOneSec.valueAt(i).equals(flag)){
                 count += 1;
                 if(count > 100){   //当满足100个时，返回此时的flag，确定是位置，并且将此i之前的所有元素删除，维持map不能太长
+                    time = locationMapOfOneSec.keyAt(i);
                     Log.d("hh", flag);
                     for(int j = i; j > 0; j--){
                         locationMapOfOneSec.removeAt(j);
                     }
-                    return flag;
+                    return time + "," + flag;
                 }
             } else {
                 flag = locationMapOfOneSec.valueAt(i);
@@ -258,7 +267,8 @@ public class ShowMapActivityFragment extends Fragment implements Cloneable {
                 i = 0;
             }
         }
-        return location;
+        time = locationMapOfOneSec.keyAt(locationMapOfOneSec.size()-1);
+        return time + "," +location;
 
     }
 
@@ -332,6 +342,7 @@ public class ShowMapActivityFragment extends Fragment implements Cloneable {
 //        sensorManager.registerListener(listener, gyroSensor, SensorManager.SENSOR_DELAY_GAME);
         sensorManager.registerListener(listener, stepSensor, SensorManager.SENSOR_DELAY_GAME);
         lastTimeOfSensor = Calendar.getInstance().getTimeInMillis();    //初始化时给时间列表填充第一个元素
+        listStepTime.add(lastTimeOfSensor);  //并且存到列表中
     }
 
     //对加速计过滤时用到的sparsearray的初始化
