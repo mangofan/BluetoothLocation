@@ -66,7 +66,7 @@
                 tools:layout_constraintTop_creator="1" />
 
             <TextView
-                android:id="@+id/textView2"
+                android:id="@+id/textViewSingalStrength"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginLeft="0dp"
@@ -80,7 +80,7 @@
                 tools:layout_editor_absoluteY="0dp" />
 
             <TextView
-                android:id="@+id/textView6"
+                android:id="@+id/textViewVar"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginLeft="0dp"
@@ -110,7 +110,7 @@
                 android:layout_marginStart="0dp"
                 android:layout_marginTop="0dp"
                 android:layout_weight="1"
-                android:text="this is mass"
+                android:text="moving or not？"
                 app:layout_constraintLeft_toLeftOf="parent"
                 app:layout_constraintTop_toTopOf="parent"
                 tools:layout_constraintLeft_creator="1"
@@ -134,7 +134,7 @@
                 android:layout_marginStart="0dp"
                 android:layout_marginTop="0dp"
                 android:layout_weight="1"
-                android:text="this is mass"
+                android:text="mass center"
                 app:layout_constraintLeft_toLeftOf="parent"
                 app:layout_constraintTop_toTopOf="parent"
                 tools:layout_constraintLeft_creator="1"

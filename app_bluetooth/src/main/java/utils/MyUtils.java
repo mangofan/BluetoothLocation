@@ -4,6 +4,7 @@ package utils;
  */
 
 import android.support.v4.util.LongSparseArray;
+import android.util.Log;
 import android.util.SparseArray;
 
 import java.math.BigDecimal;
@@ -46,15 +47,17 @@ public class MyUtils {
     }
 
     // 根据计步器，区分现在是在移动还是已经停止不动；维护一个列表，存储计步发生后所有的位置，当出现新的计步之后，表清空，重新维护，为了静止时可以对发生的位置求平均。
-    public static int getSensorState(long nowTime, List<Long> listTimeOfSensor, String newLocation){
+    public static long getSensorState(long nowTime, List<Long> listTimeOfSensor, String newLocation){
         String[] location = newLocation.split(",");
+        Log.w("newLocation", newLocation);
         locationListForStandx.add(0,location[0]);
         locationListForStandy.add(0,location[1]);
 
         long nearestSensorTime = searchTimeList(nowTime, listTimeOfSensor);
-        int toReturn;
-        if((nowTime - nearestSensorTime) > 3000){   //如果当前时刻与计步器最后更新的步数的时刻相差3秒以上，认为这段时间没有移动
-            toReturn = STANDING;
+        Log.w("time differ", (nearestSensorTime-nowTime) + "");
+        long toReturn;
+        if((nowTime - nearestSensorTime) > 1000){   //如果当前时刻与计步器最后更新的步数的时刻相差3秒以上，认为这段时间没有移动
+            toReturn = nowTime - nearestSensorTime;
         }else{
             toReturn =  MOVING;
         }
@@ -120,7 +123,7 @@ public class MyUtils {
         if(size > 2){
             flag = judgeIfLine(nearestMacLoc);
         }else
-            return nearestMacLoc.get(0)[0] + "," + nearestMacLoc.get(0)[1];
+            return nearestMacLoc.get(0)[0] + "," + nearestMacLoc.get(0)[1] + ":" +0;
 
         if (flag == 1){   //flag为1时，说明共线，为0时说明不共线
             massCenter[0] = (nearestMacLoc.get(0)[0] + nearestMacLoc.get(1)[0]) / 2;
